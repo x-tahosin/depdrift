@@ -3,39 +3,40 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>DepDrift — Know What Changed Before It Breaks</title>
-    <meta name="description" content="DepDrift scans your GitHub repos overnight, reads every dependency changelog with Gemma on DigitalOcean, and tells you what's critical, what's safe, and what to skip.">
+    <title>DepDrift — AI Changelog Reader for Outdated Dependencies</title>
+    <meta name="description" content="DepDrift scans your GitHub repositories for outdated dependencies, uses Browserbase to extract release notes, and runs Gemma 4 to classify updates by risk.">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&family=Outfit:wght@400;500;600;700;800&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="/static/style.css">
 </head>
 <body>
-    <canvas id="particles" aria-hidden="true"></canvas>
+    <!-- Background particles -->
+    <canvas id="particles" class="particles"></canvas>
 
     <div class="container">
         <!-- Hero -->
-        <header class="hero" id="hero">
+        <header class="hero">
             <div class="hero__badge">
-                <span class="hero__badge-dot"></span>
-                Powered by Gemma on DigitalOcean
+                <span class="pulse-dot"></span>
+                <span>Hacktoberfest 2026 · Week 3: Slow &amp; Steady</span>
             </div>
             <h1 class="hero__title">
-                <span class="hero__icon">🔄</span> DepDrift
+                <span class="gradient-text">DepDrift</span>
             </h1>
-            <p class="hero__subtitle">
-                Know what changed in your stack before it breaks your code.
-                <br>
-                <span class="hero__sub-detail">Gemma reads the changelogs you're too lazy to read.</span>
+            <p class="hero__tagline">The AI that reads the changelogs you're too lazy to read.</p>
+            <p class="hero__sub">
+                Gemma 4 + Browserbase headless cloud browser. Scans your GitHub repos for outdated packages, extracts dynamic release notes, and flags breaking changes before you update.
             </p>
 
+            <!-- Scan form -->
             <form class="scan-form" id="scanForm">
-                <div class="scan-form__input-wrap">
+                <div class="scan-form__group">
                     <input
                         type="text"
-                        id="scanInput"
                         class="scan-form__input"
-                        placeholder="GitHub username or owner/repo…"
+                        id="scanInput"
+                        placeholder="GitHub username (e.g. x-tahosin) or owner/repo"
                         autocomplete="off"
                         spellcheck="false"
                         required
@@ -78,6 +79,10 @@
                 <span class="stat-card__number" data-target="0">0</span>
                 <span class="stat-card__label">Critical</span>
             </div>
+            <div class="stat-card stat-card--bb" id="statBrowserbase">
+                <span class="stat-card__number" data-target="0">0</span>
+                <span class="stat-card__label">Browserbase Sessions</span>
+            </div>
             <div class="stat-card stat-card--accent" id="statSaved">
                 <span class="stat-card__number" data-target="0">0</span>
                 <span class="stat-card__label">Minutes Saved</span>
@@ -95,10 +100,10 @@
                 Built for
                 <a href="https://dev.to/challenges/hacktoberfest-week3-2026-10-19" target="_blank" rel="noopener">Hacktoberfest Week 3: Slow and Steady</a>
                 ·
-                <strong>Best Use of DigitalOcean</strong>
+                <strong>Best Use of Browserbase</strong>
                 ·
-                Gemma running on a
-                <a href="https://www.digitalocean.com/products/gpu-droplets" target="_blank" rel="noopener">DO GPU Droplet</a>
+                Gemma 4 open-weight model +
+                <a href="https://www.browserbase.com" target="_blank" rel="noopener">Browserbase Cloud Browser</a>
             </p>
         </footer>
     </div>

@@ -248,13 +248,17 @@ a:hover { text-decoration: underline; }
 
 .stats {
     display: grid;
-    grid-template-columns: repeat(4, 1fr);
+    grid-template-columns: repeat(5, 1fr);
     gap: 16px;
     margin: 32px 0;
     animation: fadeUp 0.5s ease-out both;
 }
 
-@media (max-width: 600px) {
+@media (max-width: 800px) {
+    .stats { grid-template-columns: repeat(3, 1fr); }
+}
+
+@media (max-width: 500px) {
     .stats { grid-template-columns: repeat(2, 1fr); }
 }
 
@@ -278,6 +282,7 @@ a:hover { text-decoration: underline; }
 
 .stat-card--warn .stat-card__number { color: var(--breaking); }
 .stat-card--danger .stat-card__number { color: var(--critical); }
+.stat-card--bb .stat-card__number { color: #f59e0b; }
 .stat-card--accent .stat-card__number { color: var(--cyan); }
 
 .stat-card__label {
@@ -379,6 +384,33 @@ a:hover { text-decoration: underline; }
     font-weight: 600;
     letter-spacing: 0.5px;
     text-transform: uppercase;
+}
+
+.dep-card__bb-tag {
+    grid-column: 1 / -1;
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    margin: 2px 0;
+}
+
+.bb-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    background: rgba(245, 158, 11, 0.15);
+    color: #f59e0b;
+    border: 1px solid rgba(245, 158, 11, 0.35);
+    padding: 2px 8px;
+    border-radius: 4px;
+    font-size: 0.72rem;
+    font-weight: 600;
+}
+
+.bb-session {
+    font-family: var(--font-mono);
+    font-size: 0.72rem;
+    color: var(--text-muted);
 }
 
 .dep-card__summary {
