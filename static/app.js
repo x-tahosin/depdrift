@@ -713,6 +713,14 @@
             if (!query) return;
             startScan(query);
         });
+
+        document.querySelectorAll("[data-fill]").forEach(function (btn) {
+            btn.addEventListener("click", function () {
+                const val = btn.getAttribute("data-fill");
+                if (input) input.value = val;
+                startScan(val);
+            });
+        });
     }
 
     // ── Modal Handlers: Paste Manifest ─────────────────────────────
