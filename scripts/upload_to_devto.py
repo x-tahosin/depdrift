@@ -1,12 +1,20 @@
+import os
 import sys
 import io
 import json
 import requests
 from pathlib import Path
+from dotenv import load_dotenv
+
+load_dotenv()
 
 sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8", errors="replace")
 
-API_KEY = "zxZNiSpR5RuKjM99LrbRSqaB"
+API_KEY = os.getenv("DEVTO_API_KEY", "")
+if not API_KEY:
+    print("Error: DEVTO_API_KEY is not set in environment or .env")
+    sys.exit(1)
+
 HEADERS = {
     "api-key": API_KEY,
     "Content-Type": "application/json"
