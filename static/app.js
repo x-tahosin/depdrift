@@ -676,7 +676,6 @@
             }
         ]
     };
-    }
 
     function handleEvent(data) {
         switch (data.status) {
