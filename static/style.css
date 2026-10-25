@@ -101,38 +101,13 @@ a:hover {
 
 .hero {
     text-align: center;
-    padding: 48px 0 36px;
+    padding: 64px 0 36px;
     animation: fadeUp 0.8s ease-out both;
-}
-
-.hero__badge {
-    display: inline-flex;
-    align-items: center;
-    gap: 8px;
-    padding: 6px 18px;
-    border-radius: 100px;
-    background: var(--glass);
-    border: 1px solid var(--glass-border);
-    color: var(--text-secondary);
-    font-size: 12px;
-    font-weight: 500;
-    letter-spacing: 0.4px;
-    text-transform: uppercase;
-    margin-bottom: 24px;
-}
-
-.hero__badge-dot {
-    width: 6px;
-    height: 6px;
-    border-radius: 50%;
-    background: var(--teal);
-    box-shadow: 0 0 8px var(--teal);
-    animation: pulse 2s ease-in-out infinite;
 }
 
 .hero__title {
     font-family: var(--font-heading);
-    font-size: clamp(2.4rem, 5.5vw, 3.8rem);
+    font-size: clamp(2.8rem, 6vw, 4.2rem);
     font-weight: 800;
     letter-spacing: -1.5px;
     line-height: 1.1;
@@ -141,7 +116,9 @@ a:hover {
     -webkit-background-clip: text;
     color: transparent;
     -webkit-text-fill-color: transparent;
-    margin-bottom: 14px;
+    margin: 0 auto 16px;
+    text-align: center;
+    display: block;
 }
 
 .hero__icon {
