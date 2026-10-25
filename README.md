@@ -4,6 +4,7 @@
 
 **The AI that reads the changelogs you're too lazy to read.**
 
+[![Live Demo](https://img.shields.io/badge/Demo-Live%20on%20GitHub%20Pages-00c9db.svg)](https://x-tahosin.github.io/depdrift/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-0080ff.svg)](LICENSE)
 [![Python: 3.11+](https://img.shields.io/badge/Python-3.11%2B-00c9db.svg)](https://python.org)
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.115%2B-00b386.svg)](https://fastapi.tiangolo.com)
@@ -16,7 +17,7 @@
 
 ---
 
-![DepDrift Clean Homepage](docs/hero.png)
+![DepDrift Banner](docs/cover.png)
 
 </div>
 
@@ -42,8 +43,12 @@ Half of modern npm and PyPI libraries bury their release notes across custom doc
 
 ---
 
-## 📸 Interactive Dashboard & Results
+## 📸 Interactive Web Interface & Results
 
+### 1. Minimalist Dark-Mode Interface
+![DepDrift Web Interface](docs/hero.png)
+
+### 2. Live Audit Dashboard
 ![DepDrift Results Dashboard](docs/results-dashboard.png)
 
 ### Key Features
