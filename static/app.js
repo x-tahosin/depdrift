@@ -82,6 +82,7 @@
     // ── Counter animation ────────────────────────────────────────
 
     function animateCounter(el, target) {
+        if (!el) return;
         const duration = 800;
         const start = performance.now();
         const from = parseInt(el.textContent, 10) || 0;
@@ -98,22 +99,37 @@
 
     function updateStats(stats) {
         statsSection.hidden = false;
-
-        const map = {
-            statTotal:    stats.total_deps,
-            statOutdated: stats.outdated,
-            statCritical: stats.critical,
-            statSaved:    stats.time_saved_minutes,
-        };
-
-        for (const [id, val] of Object.entries(map)) {
-            const card = document.getElementById(id);
-            const numEl = card.querySelector(".stat-card__number");
-            animateCounter(numEl, val);
-        }
+        animateCounter(document.querySelector("#statTotal .stat-card__number"), stats.total_deps || 0);
+        animateCounter(document.querySelector("#statOutdated .stat-card__number"), stats.outdated || 0);
+        animateCounter(document.querySelector("#statCritical .stat-card__number"), stats.critical || 0);
+        animateCounter(document.querySelector("#statBrowserbase .stat-card__number"), stats.browserbase_extractions || 0);
+        animateCounter(document.querySelector("#statSaved .stat-card__number"), stats.time_saved_minutes || 0);
     }
 
-    // ── Result rendering ─────────────────────────────────────────
+    // ── UI state helpers ─────────────────────────────────────────
+
+    function setLoading(loading) {
+        btn.disabled = loading;
+        btnText.hidden = loading;
+        btnLoading.hidden = !loading;
+    }
+
+    function showError(msg) {
+        logSection.hidden = false;
+        logText.innerHTML = '<span style="color:var(--color-critical)">' + escHtml(msg) + "</span>";
+    }
+
+    function escHtml(str) {
+        if (!str) return "";
+        return String(str)
+            .replace(/&/g, "&amp;")
+            .replace(/</g, "&lt;")
+            .replace(/>/g, "&gt;")
+            .replace(/"/g, "&quot;")
+            .replace(/'/g, "&#039;");
+    }
+
+    // ── Render results ───────────────────────────────────────────
 
     function renderResults(results) {
         resultsSection.hidden = false;
@@ -139,8 +155,8 @@
                 "</span>";
             group.appendChild(header);
 
-            // sort: critical first, then breaking, then unknown, then safe, then current/skip
-            const order = { CRITICAL: 0, BREAKING: 1, UNKNOWN: 2, SAFE: 3, SKIP: 4, CURRENT: 5 };
+            // sort: critical first, then breaking, then safe, then skip, then current
+            const order = { CRITICAL: 0, BREAKING: 1, SAFE: 2, SKIP: 3, CURRENT: 4, UNKNOWN: 5 };
             const sorted = [...repo.dependencies].sort(function (a, b) {
                 return (order[a.risk] ?? 9) - (order[b.risk] ?? 9);
             });
@@ -166,6 +182,15 @@
                         '<div class="dep-card__version">' +
                             '<code>' + escHtml(dep.current_version) + '</code>' +
                         "</div>";
+                }
+
+                if (dep.changelog_source === "browserbase" || dep.browserbase_session) {
+                    const sid = dep.browserbase_session ? dep.browserbase_session.slice(0, 8) : "cloud";
+                    html +=
+                        '<div class="dep-card__bb-tag">' +
+                            '<span class="bb-pill">🌐 Browserbase Extracted</span>' +
+                            '<span class="bb-session">Session: ' + escHtml(sid) + '…</span>' +
+                        '</div>';
                 }
 
                 if (dep.summary && dep.risk !== "CURRENT") {
@@ -258,51 +283,25 @@
                 break;
 
             case "complete":
-                logSection.hidden = true;
+                logText.textContent = data.message || "Scan finished.";
                 if (data.stats) updateStats(data.stats);
                 if (data.results) renderResults(data.results);
                 footer.hidden = false;
-                setLoading(false);
                 break;
 
             case "error":
-                showError(data.message || "Unknown error.");
-                setLoading(false);
+                showError(data.message || "An error occurred.");
                 break;
         }
-    }
-
-    // ── Helpers ───────────────────────────────────────────────────
-
-    function setLoading(on) {
-        btn.disabled = on;
-        input.disabled = on;
-        btnText.hidden = on;
-        btnLoading.hidden = !on;
-    }
-
-    function showError(msg) {
-        logSection.hidden = true;
-        var div = document.createElement("div");
-        div.className = "error-msg";
-        div.textContent = msg;
-        resultsContainer.innerHTML = "";
-        resultsContainer.appendChild(div);
-        resultsSection.hidden = false;
-    }
-
-    function escHtml(str) {
-        var div = document.createElement("div");
-        div.appendChild(document.createTextNode(str || ""));
-        return div.innerHTML;
     }
 
     // ── Form submit ──────────────────────────────────────────────
 
     form.addEventListener("submit", function (e) {
         e.preventDefault();
-        var val = input.value.trim();
-        if (!val) return;
-        startScan(val);
+        const query = input.value.trim();
+        if (!query) return;
+        startScan(query);
     });
+
 })();

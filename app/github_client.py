@@ -61,6 +61,8 @@ class GitHubClient:
             return resp.text
         return None
 
+    get_file = fetch_file_raw
+
     async def fetch_dep_files(
         self, owner: str, repo: str, branch: str
     ) -> dict[str, str]:

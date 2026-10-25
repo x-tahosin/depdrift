@@ -1,14 +1,15 @@
 """DepDrift — FastAPI entry point.
 
-Scans GitHub repos for outdated dependencies, fetches changelogs,
-and uses Gemma (via Ollama on a DigitalOcean GPU Droplet) to classify
-each update by risk level.
+Scans GitHub repos for outdated dependencies, fetches changelogs
+(via GitHub Releases or Browserbase headless cloud browser for dynamic web pages),
+and uses Gemma 4 to classify each update by risk level.
 """
 
 from __future__ import annotations
 
 import asyncio
 import json
+import logging
 import os
 import time
 from contextlib import asynccontextmanager
@@ -21,6 +22,7 @@ from fastapi import FastAPI, HTTPException, Query
 from fastapi.responses import FileResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 
+from app.browserbase_client import fetch_web_changelog
 from app.dep_parser import parse_package_json, parse_requirements_txt
 from app.gemma_analyzer import analyze_changelog
 from app.github_client import GitHubClient, parse_github_input
@@ -28,12 +30,17 @@ from app.models import DependencyResult, RepoResult, ScanProgress
 from app.registry_client import check_npm, check_pypi, is_outdated
 
 load_dotenv()
+logger = logging.getLogger("depdrift")
 
 # ── configuration ───────────────────────────────────────────────────
 
 GITHUB_TOKEN = os.getenv("GITHUB_TOKEN", "")
 OLLAMA_URL = os.getenv("OLLAMA_URL", "http://localhost:11434")
-GEMMA_MODEL = os.getenv("GEMMA_MODEL", "gemma2:2b")
+GEMMA_MODEL = os.getenv("GEMMA_MODEL", "gemma-4-26b-a4b-it")
+GEMMA_API_KEY = os.getenv("GEMMA_API_KEY", "")
+BROWSERBASE_API_KEY = os.getenv("BROWSERBASE_API_KEY", "")
+BROWSERBASE_PROJECT_ID = os.getenv("BROWSERBASE_PROJECT_ID", "")
+
 MAX_DEPS_PER_REPO = 30  # cap to avoid API rate exhaustion
 MAX_REPOS = 10
 
@@ -58,64 +65,80 @@ app = FastAPI(title="DepDrift", lifespan=lifespan)
 # ── SSE helper ──────────────────────────────────────────────────────
 
 def _sse(data: dict) -> str:
-    return f"data: {json.dumps(data, default=str)}\n\n"
+    """Format a dict as a Server-Sent Event."""
+    return f"data: {json.dumps(data)}\n\n"
 
 
-# ── core scan logic ────────────────────────────────────────────────
+# ── single repo scan pipeline ───────────────────────────────────────
 
 async def _scan_single_repo(
     gh: GitHubClient,
     http: httpx.AsyncClient,
     owner: str,
     repo_name: str,
-    branch: str,
+    branch: str = "main",
 ) -> AsyncGenerator[str, None]:
-    """Scan one repo and yield SSE events for each dependency."""
+    """Scan one repository, yielding SSE events for each stage."""
+    yield _sse({
+        "status": "scanning",
+        "repo": repo_name,
+        "message": f"Checking dependency files in {owner}/{repo_name}…",
+    })
 
-    yield _sse({"status": "scanning", "repo": repo_name, "message": f"Fetching dependency files from {owner}/{repo_name}…"})
+    # Fetch dependency manifest files
+    pkg_raw = await gh.fetch_file_raw(owner, repo_name, branch, "package.json")
+    req_raw = await gh.fetch_file_raw(owner, repo_name, branch, "requirements.txt")
 
-    dep_files = await gh.fetch_dep_files(owner, repo_name, branch)
-    if not dep_files:
-        yield _sse({"status": "repo_done", "repo": repo_name, "message": "No dependency files found."})
+    parsed: list[tuple[str, str, str]] = []  # (name, version, ecosystem)
+
+    if pkg_raw:
+        for name, ver in parse_package_json(pkg_raw):
+            parsed.append((name, ver, "npm"))
+
+    if req_raw:
+        for name, ver in parse_requirements_txt(req_raw):
+            parsed.append((name, ver, "pypi"))
+
+    if not parsed:
+        yield _sse({
+            "status": "repo_done",
+            "repo": repo_name,
+            "message": f"No dependency files found in {owner}/{repo_name}.",
+            "result": RepoResult(
+                repo_name=f"{owner}/{repo_name}",
+                repo_url=f"https://github.com/{owner}/{repo_name}",
+                default_branch=branch,
+                dependencies=[],
+                total=0,
+                outdated=0,
+                critical=0,
+            ).model_dump(),
+        })
         return
 
-    # parse all deps
-    all_deps: list[tuple[str, str, str]] = []  # (name, version, ecosystem)
-    if "npm" in dep_files:
-        for name, ver in parse_package_json(dep_files["npm"]):
-            all_deps.append((name, ver, "npm"))
-    if "pypi" in dep_files:
-        for name, ver in parse_requirements_txt(dep_files["pypi"]):
-            all_deps.append((name, ver, "pypi"))
-
-    # cap
-    all_deps = all_deps[:MAX_DEPS_PER_REPO]
-    total = len(all_deps)
-
-    if total == 0:
-        yield _sse({"status": "repo_done", "repo": repo_name, "message": "No parseable dependencies."})
-        return
+    # Cap per repo to avoid rate exhaustion
+    parsed = parsed[:MAX_DEPS_PER_REPO]
+    total = len(parsed)
 
     yield _sse({
-        "status": "checking",
+        "status": "scanning",
         "repo": repo_name,
-        "message": f"Found {total} dependencies. Checking versions…",
+        "message": f"Found {total} dependencies in {owner}/{repo_name}. Checking versions…",
     })
 
     results: list[DependencyResult] = []
     outdated_count = 0
     critical_count = 0
 
-    for idx, (dep_name, current_ver, ecosystem) in enumerate(all_deps, 1):
+    for idx, (dep_name, current_ver, ecosystem) in enumerate(parsed, 1):
         yield _sse({
             "status": "checking",
             "repo": repo_name,
             "dep": dep_name,
             "progress": f"{idx}/{total}",
-            "message": f"Checking {dep_name} ({idx}/{total})…",
+            "message": f"Checking {dep_name} ({ecosystem}) on registry…",
         })
 
-        # look up latest version + source repo
         if ecosystem == "npm":
             latest_ver, gh_repo_url = await check_npm(http, dep_name)
         else:
@@ -135,12 +158,14 @@ async def _scan_single_repo(
                 action="No action needed.",
                 changelog_url=gh_repo_url + "/releases" if gh_repo_url else "",
                 github_repo_url=gh_repo_url,
+                browserbase_session=None,
+                changelog_source="registry",
             ))
             continue
 
         outdated_count += 1
 
-        # fetch changelog for outdated deps
+        # Fetch changelog for outdated dependencies
         yield _sse({
             "status": "analyzing",
             "repo": repo_name,
@@ -150,12 +175,37 @@ async def _scan_single_repo(
         })
 
         changelog = ""
+        source = "github_releases"
+        bb_session = None
+
         if gh_repo_url:
             changelog = await gh.get_changelog_text(gh_repo_url)
+
+        # If changelog is missing from GitHub releases or empty,
+        # use Browserbase cloud browser to render dynamic package page/docs and extract notes
+        if not changelog or len(changelog) < 60:
+            target_url = (
+                f"https://www.npmjs.com/package/{dep_name}"
+                if ecosystem == "npm"
+                else f"https://pypi.org/project/{dep_name}/"
+            )
+            yield _sse({
+                "status": "analyzing",
+                "repo": repo_name,
+                "dep": dep_name,
+                "progress": f"{idx}/{total}",
+                "message": f"Extracting dynamic changelog via Browserbase cloud browser for {dep_name}…",
+            })
+            bb_res = await fetch_web_changelog(target_url)
+            if bb_res.get("content"):
+                changelog = bb_res["content"]
+                source = "browserbase"
+                bb_session = bb_res.get("session_id")
 
         analysis = await analyze_changelog(
             http, OLLAMA_URL, GEMMA_MODEL,
             dep_name, current_ver, latest_ver, changelog,
+            api_key=GEMMA_API_KEY,
         )
 
         if analysis["risk"] == "CRITICAL":
@@ -172,6 +222,8 @@ async def _scan_single_repo(
             action=analysis["action"],
             changelog_url=gh_repo_url + "/releases" if gh_repo_url else "",
             github_repo_url=gh_repo_url,
+            browserbase_session=bb_session,
+            changelog_source=source,
         ))
 
     repo_result = RepoResult(
@@ -218,7 +270,6 @@ async def scan(input: str = Query(..., description="GitHub username, owner/repo,
             branch = info.get("default_branch", "main")
             async for event in _scan_single_repo(gh, _http_client, owner, repo, branch):
                 yield event
-                # capture repo_done result
                 data = json.loads(event.split("data: ", 1)[1].split("\n")[0])
                 if data.get("status") == "repo_done" and data.get("result"):
                     all_results.append(data["result"])
@@ -246,7 +297,11 @@ async def scan(input: str = Query(..., description="GitHub username, owner/repo,
         total_outdated = sum(r.get("outdated", 0) for r in all_results)
         total_critical = sum(r.get("critical", 0) for r in all_results)
 
-        # estimate: 2 minutes per manual changelog read × outdated deps
+        # Count browserbase extractions
+        total_bb = sum(
+            1 for r in all_results for d in r.get("dependencies", []) if d.get("changelog_source") == "browserbase"
+        )
+
         time_saved = total_outdated * 2
 
         yield _sse({
@@ -257,6 +312,7 @@ async def scan(input: str = Query(..., description="GitHub username, owner/repo,
                 "total_deps": total_deps,
                 "outdated": total_outdated,
                 "critical": total_critical,
+                "browserbase_extractions": total_bb,
                 "time_saved_minutes": time_saved,
                 "scan_seconds": elapsed,
                 "repos_scanned": len(all_results),
@@ -276,7 +332,12 @@ async def scan(input: str = Query(..., description="GitHub username, owner/repo,
 @app.get("/api/health")
 async def health():
     """Health check endpoint."""
-    return {"status": "ok", "model": GEMMA_MODEL, "ollama": OLLAMA_URL}
+    return {
+        "status": "ok",
+        "model": GEMMA_MODEL,
+        "browserbase_configured": bool(os.getenv("BROWSERBASE_API_KEY")),
+        "gemma_configured": bool(os.getenv("GEMMA_API_KEY")),
+    }
 
 
 # ── static file serving ────────────────────────────────────────────

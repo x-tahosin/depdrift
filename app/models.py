@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from typing import Optional
 from pydantic import BaseModel
 
 
@@ -17,11 +18,13 @@ class DependencyResult(BaseModel):
     current_version: str
     latest_version: str
     is_outdated: bool
-    risk: str  # CRITICAL | BREAKING | SAFE | SKIP | CURRENT | UNKNOWN
+    risk: str  # CRITICAL | BREAKING | SAFE | SKIP | CURRENT
     summary: str
     action: str
     changelog_url: str
     github_repo_url: str
+    browserbase_session: Optional[str] = None
+    changelog_source: Optional[str] = None  # "github_releases" | "browserbase" | "registry"
 
 
 class RepoResult(BaseModel):
