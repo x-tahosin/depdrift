@@ -1,14 +1,14 @@
 /**
- * DepDrift — Production Client Engine (v2.0.0)
+ * DepDrift — Authoritative Client Engine
  *
- * Full-featured controller for:
- * - Tab navigation (Scanner, Direct Manifest, Inspector, History, Diagnostics, Docs)
- * - Server-Sent Events (SSE) repository scanner
- * - Direct package.json / requirements.txt manifest auditing
- * - Single package deep inspection
- * - Persistent SQLite audit history management
- * - Infrastructure diagnostics & health checks
- * - Batch safe update scripts & PR markdown / CSV exports
+ * Implements:
+ * - Ambient particle starfield canvas animation
+ * - SSE streaming repository scanner
+ * - Animated tabular metrics counters
+ * - Risk-stratified dependency cards with Browserbase & CVE badges
+ * - Filter pills & 1-click batch safe bump / PR markdown export
+ * - Direct manifest auditor & single package deep inspector modals
+ * - System infrastructure diagnostics
  */
 
 (function () {
@@ -18,907 +18,63 @@
     let currentResults = [];
     let currentStats = {};
     let activeFilter = "ALL";
-    let activeSearchTerm = "";
 
     // ── DOM References ─────────────────────────────────────────────
-    const navTabs = document.querySelectorAll(".nav-tab");
-    const tabPanes = document.querySelectorAll(".tab-pane");
-
-    // Scanner DOM
-    const ghScanForm = document.getElementById("ghScanForm");
-    const ghScanInput = document.getElementById("ghScanInput");
-    const ghScanBtn = document.getElementById("ghScanBtn");
-    const scanStreamPanel = document.getElementById("scanStreamPanel");
-    const scanStreamStatus = document.getElementById("scanStreamStatus");
-    const scanStreamCounter = document.getElementById("scanStreamCounter");
-    const scanStreamLog = document.getElementById("scanStreamLog");
-    const auditWorkspace = document.getElementById("auditWorkspace");
-    const resultsTableBody = document.getElementById("resultsTableBody");
-
-    // Metrics DOM
-    const metricTotal = document.getElementById("metricTotal");
-    const metricOutdated = document.getElementById("metricOutdated");
-    const metricOutdatedPct = document.getElementById("metricOutdatedPct");
-    const metricCritical = document.getElementById("metricCritical");
-    const metricBreaking = document.getElementById("metricBreaking");
-    const metricSafe = document.getElementById("metricSafe");
-    const metricBrowserbase = document.getElementById("metricBrowserbase");
-
-    // Filters & Search
-    const filterPills = document.querySelectorAll(".filter-pill");
-    const depSearchInput = document.getElementById("depSearchInput");
-    const countAll = document.getElementById("countAll");
-    const countCritical = document.getElementById("countCritical");
-    const countBreaking = document.getElementById("countBreaking");
-    const countSafe = document.getElementById("countSafe");
-    const countCurrent = document.getElementById("countCurrent");
-
-    // Batch & Export
-    const btnBatchSafe = document.getElementById("btnBatchSafe");
-    const btnExportMenu = document.getElementById("btnExportMenu");
-    const exportDropdown = document.getElementById("exportDropdown");
-    const exportMarkdown = document.getElementById("exportMarkdown");
-    const exportJSON = document.getElementById("exportJSON");
-    const exportCSV = document.getElementById("exportCSV");
-
-    // Manifest Tab DOM
-    const manifestTextarea = document.getElementById("manifestTextarea");
-    const btnRunManifestAudit = document.getElementById("btnRunManifestAudit");
-    const btnLoadExampleManifest = document.getElementById("btnLoadExampleManifest");
-    const fileDropZone = document.getElementById("fileDropZone");
-    const manifestFileInput = document.getElementById("manifestFileInput");
-
-    // Inspector Tab DOM
-    const inspectForm = document.getElementById("inspectForm");
-    const inspectPkgName = document.getElementById("inspectPkgName");
-    const inspectCurrentVer = document.getElementById("inspectCurrentVer");
-    const inspectEcosystem = document.getElementById("inspectEcosystem");
-    const btnRunInspect = document.getElementById("btnRunInspect");
-    const inspectorResultPanel = document.getElementById("inspectorResultPanel");
-
-    // History Tab DOM
-    const historyTableBody = document.getElementById("historyTableBody");
-    const btnRefreshHistory = document.getElementById("btnRefreshHistory");
-
-    // Diagnostics Tab DOM
-    const btnRunDiagnostics = document.getElementById("btnRunDiagnostics");
-
-    // Modal DOM
-    const depDetailModal = document.getElementById("depDetailModal");
-    const modalDepName = document.getElementById("modalDepName");
-    const modalDepRisk = document.getElementById("modalDepRisk");
-    const modalBody = document.getElementById("modalBody");
-    const modalCloseBtn = document.getElementById("modalCloseBtn");
-    const toastContainer = document.getElementById("toastContainer");
-
-    // ── Toast Helper ───────────────────────────────────────────────
-    function showToast(message, duration = 3200) {
-        const toast = document.createElement("div");
-        toast.className = "toast";
-        toast.textContent = message;
-        toastContainer.appendChild(toast);
-        setTimeout(() => {
-            toast.style.opacity = "0";
-            toast.style.transform = "translateX(100%)";
-            toast.style.transition = "all 0.2s ease";
-            setTimeout(() => toast.remove(), 250);
-        }, duration);
-    }
-
-    // ── Tab Switching ──────────────────────────────────────────────
-    function switchTab(tabId) {
-        navTabs.forEach(t => t.classList.toggle("active", t.dataset.tab === tabId));
-        tabPanes.forEach(p => {
-            if (p.id === "tab-" + tabId) {
-                p.hidden = false;
-                p.classList.add("active");
-            } else {
-                p.hidden = true;
-                p.classList.remove("active");
-            }
-        });
-
-        if (tabId === "history") loadAuditHistory();
-        if (tabId === "diagnostics") loadDiagnostics();
-    }
-
-    navTabs.forEach(tab => {
-        tab.addEventListener("click", () => switchTab(tab.dataset.tab));
-    });
-
-    // ── Quick Fill Chips ───────────────────────────────────────────
-    document.querySelectorAll(".chip-btn[data-fill]").forEach(btn => {
-        btn.addEventListener("click", () => {
-            ghScanInput.value = btn.dataset.fill;
-            ghScanInput.focus();
-        });
-    });
-
-    // ── Number Counter Animation ───────────────────────────────────
-    function animateNumber(el, target) {
-        if (!el) return;
-        const start = parseInt(el.textContent, 10) || 0;
-        const diff = target - start;
-        const duration = 600;
-        const startTime = performance.now();
-
-        function step(now) {
-            const progress = Math.min((now - startTime) / duration, 1);
-            const ease = 1 - Math.pow(1 - progress, 3);
-            el.textContent = Math.round(start + diff * ease);
-            if (progress < 1) requestAnimationFrame(step);
-        }
-        requestAnimationFrame(step);
-    }
-
-    function updateMetrics(stats) {
-        currentStats = stats;
-        const total = stats.total_deps || 0;
-        const outdated = stats.outdated || 0;
-        const critical = stats.critical || 0;
-        const breaking = stats.breaking || 0;
-        const safe = stats.safe || 0;
-        const bb = stats.browserbase_extractions || 0;
-
-        animateNumber(metricTotal, total);
-        animateNumber(metricOutdated, outdated);
-        animateNumber(metricCritical, critical);
-        animateNumber(metricBreaking, breaking);
-        animateNumber(metricSafe, safe);
-        animateNumber(metricBrowserbase, bb);
-
-        if (metricOutdatedPct) {
-            const pct = total > 0 ? Math.round((outdated / total) * 100) : 0;
-            metricOutdatedPct.textContent = `${pct}% of dependency tree`;
-        }
-
-        // Update counts in filter pills
-        countAll.textContent = total;
-        countCritical.textContent = critical;
-        countBreaking.textContent = breaking;
-        countSafe.textContent = safe;
-        countCurrent.textContent = total - outdated;
-    }
-
-    // ── Rendering Dependency Cards ─────────────────────────────────
-    function renderResults(results) {
-        currentResults = results;
-        auditWorkspace.hidden = false;
-        resultsTableBody.innerHTML = "";
-
-        for (const repo of results) {
-            const repoCard = document.createElement("div");
-            repoCard.className = "repo-card";
-
-            const header = document.createElement("div");
-            header.className = "repo-card__header";
-            header.innerHTML = `
-                <div class="repo-card__title">
-                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg>
-                    <a href="${esc(repo.repo_url)}" target="_blank" rel="noopener">${esc(repo.repo_name)}</a>
-                </div>
-                <div class="text-muted" style="font-size:0.8rem">
-                    ${repo.total} dependencies · branch: <code>${esc(repo.default_branch || "main")}</code>
-                </div>
-            `;
-            repoCard.appendChild(header);
-
-            // Filter dependencies
-            let deps = repo.dependencies || [];
-            if (activeFilter !== "ALL") {
-                deps = deps.filter(d => d.risk === activeFilter);
-            }
-            if (activeSearchTerm) {
-                const term = activeSearchTerm.toLowerCase();
-                deps = deps.filter(d => d.name.toLowerCase().includes(term));
-            }
-
-            // Sort: CRITICAL -> BREAKING -> SAFE -> SKIP -> CURRENT
-            const riskOrder = { CRITICAL: 0, BREAKING: 1, SAFE: 2, SKIP: 3, CURRENT: 4 };
-            deps = [...deps].sort((a, b) => (riskOrder[a.risk] ?? 5) - (riskOrder[b.risk] ?? 5));
-
-            if (deps.length === 0) {
-                const empty = document.createElement("div");
-                empty.style.padding = "1.5rem";
-                empty.className = "text-center text-muted";
-                empty.textContent = "No dependencies match the selected filter.";
-                repoCard.appendChild(empty);
-            } else {
-                for (const dep of deps) {
-                    const row = document.createElement("div");
-                    row.className = "dep-row";
-
-                    let versionHtml = `<code>${esc(dep.current_version)}</code>`;
-                    if (dep.is_outdated) {
-                        versionHtml += `<span style="color:var(--text-muted)"> → </span><code class="latest">${esc(dep.latest_version)}</code>`;
-                    }
-
-                    let tagsHtml = "";
-                    if (dep.changelog_source === "browserbase" || dep.browserbase_session) {
-                        const sid = dep.browserbase_session ? dep.browserbase_session.slice(0, 8) : "cloud";
-                        tagsHtml += `<span class="bb-tag">🌐 Browserbase (${esc(sid)})</span>`;
-                    }
-                    if (dep.advisories && dep.advisories.length > 0) {
-                        const advCount = dep.advisories.length;
-                        tagsHtml += `<span class="cve-tag">⚠ ${advCount} Advisory${advCount > 1 ? "s" : ""}</span>`;
-                    }
-
-                    row.innerHTML = `
-                        <div class="dep-row__name">
-                            <span>${esc(dep.name)}</span>
-                            <span class="dep-row__eco">${esc(dep.ecosystem)}</span>
-                        </div>
-                        <div class="dep-row__version">${versionHtml}</div>
-                        <div><span class="badge badge--${esc(dep.risk)}">${esc(dep.risk)}</span></div>
-                        <div class="dep-row__summary">${esc(dep.summary || "No summary provided.")}</div>
-                        <div class="dep-row__tags">${tagsHtml}</div>
-                    `;
-
-                    row.addEventListener("click", () => openDepDetailModal(dep));
-                    repoCard.appendChild(row);
-                }
-            }
-
-            resultsTableBody.appendChild(repoCard);
-        }
-    }
-
-    // ── Filter & Search Handlers ───────────────────────────────────
-    filterPills.forEach(pill => {
-        pill.addEventListener("click", () => {
-            filterPills.forEach(p => p.classList.remove("active"));
-            pill.classList.add("active");
-            activeFilter = pill.dataset.filter;
-            renderResults(currentResults);
-        });
-    });
-
-    if (depSearchInput) {
-        depSearchInput.addEventListener("input", (e) => {
-            activeSearchTerm = e.target.value.trim();
-            renderResults(currentResults);
-        });
-    }
-
-    // ── Dependency Detail Modal ────────────────────────────────────
-    function openDepDetailModal(dep) {
-        modalDepName.textContent = dep.name;
-        modalDepRisk.className = `badge badge--${dep.risk}`;
-        modalDepRisk.textContent = dep.risk;
-
-        let advisoriesHtml = "";
-        if (dep.advisories && dep.advisories.length > 0) {
-            advisoriesHtml = `
-                <div>
-                    <div class="modal-section-title">Security Advisories (CVE / GHSA)</div>
-                    <div style="display:flex; flex-direction:column; gap:0.5rem">
-                        ${dep.advisories.map(a => `
-                            <div style="background:var(--bg-input); padding:0.6rem 0.8rem; border-radius:6px; border:1px solid rgba(239,68,68,0.2)">
-                                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:0.25rem">
-                                    <strong style="color:var(--color-critical); font-family:var(--font-mono)">${esc(a.cve_id || a.ghsa_id || "CVE")}</strong>
-                                    <span class="badge badge--CRITICAL">${esc(a.severity)}</span>
-                                </div>
-                                <div style="font-size:0.8rem; color:var(--text-secondary)">${esc(a.summary)}</div>
-                                ${a.url ? `<a href="${esc(a.url)}" target="_blank" rel="noopener" style="font-size:0.75rem; color:var(--color-accent); display:inline-block; margin-top:0.25rem">View Advisory Details →</a>` : ""}
-                            </div>
-                        `).join("")}
-                    </div>
-                </div>
-            `;
-        }
-
-        let browserbaseHtml = "";
-        if (dep.changelog_source === "browserbase" || dep.browserbase_session) {
-            browserbaseHtml = `
-                <div>
-                    <div class="modal-section-title">Browserbase Cloud Browser Extraction</div>
-                    <div style="background:var(--bg-input); padding:0.6rem 0.8rem; border-radius:6px; border:1px solid rgba(0,216,246,0.2); font-size:0.8rem; color:var(--text-secondary)">
-                        <div><strong>Extraction Mode:</strong> Remote Chrome DevTools Protocol (CDP) session</div>
-                        <div><strong>Session ID:</strong> <code>${esc(dep.browserbase_session || "dynamic-cloud-session")}</code></div>
-                        <div style="margin-top:0.3rem">Client-side JavaScript and DOM hydrated before text extraction for Gemma 4.</div>
-                    </div>
-                </div>
-            `;
-        }
-
-        modalBody.innerHTML = `
-            <div>
-                <div class="modal-section-title">Version Transition</div>
-                <div style="font-family:var(--font-mono); font-size:0.95rem">
-                    <code>${esc(dep.current_version)}</code>
-                    <span style="color:var(--text-muted)"> → </span>
-                    <code style="color:var(--color-accent)">${esc(dep.latest_version)}</code>
-                    <span style="font-size:0.8rem; color:var(--text-muted); margin-left:0.5rem">(${esc(dep.ecosystem)})</span>
-                </div>
-            </div>
-
-            <div>
-                <div class="modal-section-title">AI Analysis &amp; Reasoning</div>
-                <div style="font-size:0.9rem; color:var(--text-primary); line-height:1.5">${esc(dep.summary || "No summary available.")}</div>
-            </div>
-
-            <div>
-                <div class="modal-section-title">Recommended Action</div>
-                <div style="font-size:0.9rem; color:var(--text-primary); line-height:1.5">${esc(dep.action || "No action specified.")}</div>
-            </div>
-
-            ${dep.update_command ? `
-                <div>
-                    <div class="modal-section-title">Update Command</div>
-                    <div class="command-box">
-                        <code>${esc(dep.update_command)}</code>
-                        <button type="button" class="copy-btn" id="btnCopyModalCmd">Copy</button>
-                    </div>
-                </div>
-            ` : ""}
-
-            ${advisoriesHtml}
-            ${browserbaseHtml}
-
-            <div>
-                <div class="modal-section-title">External References</div>
-                <div style="display:flex; gap:1rem; font-size:0.85rem">
-                    ${dep.github_repo_url ? `<a href="${esc(dep.github_repo_url)}" target="_blank" rel="noopener" style="color:var(--color-accent)">GitHub Repo →</a>` : ""}
-                    ${dep.changelog_url ? `<a href="${esc(dep.changelog_url)}" target="_blank" rel="noopener" style="color:var(--color-accent)">Release Notes →</a>` : ""}
-                    <a href="${dep.ecosystem === 'npm' ? `https://www.npmjs.com/package/${esc(dep.name)}` : `https://pypi.org/project/${esc(dep.name)}/`}" target="_blank" rel="noopener" style="color:var(--color-accent)">Registry Page →</a>
-                </div>
-            </div>
-        `;
-
-        const copyBtn = document.getElementById("btnCopyModalCmd");
-        if (copyBtn) {
-            copyBtn.addEventListener("click", () => {
-                navigator.clipboard.writeText(dep.update_command);
-                showToast("Update command copied to clipboard!");
-            });
-        }
-
-        depDetailModal.hidden = false;
-    }
-
-    if (modalCloseBtn) {
-        modalCloseBtn.addEventListener("click", () => depDetailModal.hidden = true);
-    }
-    depDetailModal.addEventListener("click", (e) => {
-        if (e.target === depDetailModal) depDetailModal.hidden = true;
-    });
-
-    // ── Batch Safe Update Command Generator ───────────────────────
-    if (btnBatchSafe) {
-        btnBatchSafe.addEventListener("click", () => {
-            const safeDeps = [];
-            for (const repo of currentResults) {
-                for (const dep of repo.dependencies || []) {
-                    if (dep.risk === "SAFE" && dep.is_outdated) {
-                        safeDeps.push(dep);
-                    }
-                }
-            }
-
-            if (safeDeps.length === 0) {
-                showToast("No outdated dependencies in the 'SAFE' category to batch-update.");
-                return;
-            }
-
-            // Group by ecosystem
-            const npmDeps = safeDeps.filter(d => d.ecosystem === "npm");
-            const pypiDeps = safeDeps.filter(d => d.ecosystem === "pypi");
-
-            let cmd = "";
-            if (npmDeps.length > 0) {
-                cmd += "npm install " + npmDeps.map(d => `${d.name}@^${d.latest_version}`).join(" ");
-            }
-            if (pypiDeps.length > 0) {
-                if (cmd) cmd += " && ";
-                cmd += "pip install " + pypiDeps.map(d => `${d.name}==${d.latest_version}`).join(" ");
-            }
-
-            navigator.clipboard.writeText(cmd);
-            showToast(`Copied safe update script for ${safeDeps.length} packages!`);
-        });
-    }
-
-    // ── Export Menu & Reports ──────────────────────────────────────
-    if (btnExportMenu) {
-        btnExportMenu.addEventListener("click", (e) => {
-            e.stopPropagation();
-            exportDropdown.hidden = !exportDropdown.hidden;
-        });
-        document.addEventListener("click", () => exportDropdown.hidden = true);
-    }
-
-    if (exportMarkdown) {
-        exportMarkdown.addEventListener("click", () => {
-            let md = `# DepDrift Dependency Audit Report\n\n`;
-            md += `Generated: ${new Date().toISOString()}\n\n`;
-            md += `## Summary Metrics\n\n`;
-            md += `- **Total Dependencies:** ${currentStats.total_deps || 0}\n`;
-            md += `- **Outdated Drift:** ${currentStats.outdated || 0}\n`;
-            md += `- **Critical CVEs:** ${currentStats.critical || 0}\n`;
-            md += `- **Breaking Changes:** ${currentStats.breaking || 0}\n`;
-            md += `- **Safe to Bump:** ${currentStats.safe || 0}\n\n`;
-
-            md += `## Detailed Package Findings\n\n`;
-            md += `| Package | Current | Latest | Risk | Summary | Recommended Action |\n`;
-            md += `|---|---|---|---|---|---|\n`;
-
-            for (const repo of currentResults) {
-                for (const dep of repo.dependencies || []) {
-                    if (dep.is_outdated) {
-                        md += `| **${dep.name}** | \`${dep.current_version}\` | \`${dep.latest_version}\` | **${dep.risk}** | ${dep.summary.replace(/\|/g, '-')} | ${dep.action.replace(/\|/g, '-')} |\n`;
-                    }
-                }
-            }
-
-            navigator.clipboard.writeText(md);
-            showToast("GitHub PR Markdown report copied to clipboard!");
-        });
-    }
-
-    if (exportJSON) {
-        exportJSON.addEventListener("click", () => {
-            const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify({
-                generated_at: new Date().toISOString(),
-                stats: currentStats,
-                results: currentResults
-            }, null, 2));
-            const dl = document.createElement("a");
-            dl.setAttribute("href", dataStr);
-            dl.setAttribute("download", `depdrift_audit_${Date.now()}.json`);
-            dl.click();
-            showToast("Downloaded JSON audit file!");
-        });
-    }
-
-    if (exportCSV) {
-        exportCSV.addEventListener("click", () => {
-            let csv = "Repository,Package,Ecosystem,CurrentVersion,LatestVersion,Risk,Summary,UpdateCommand\n";
-            for (const repo of currentResults) {
-                for (const dep of repo.dependencies || []) {
-                    csv += `"${repo.repo_name}","${dep.name}","${dep.ecosystem}","${dep.current_version}","${dep.latest_version}","${dep.risk}","${(dep.summary || '').replace(/"/g, '""')}","${(dep.update_command || '').replace(/"/g, '""')}"\n`;
-                }
-            }
-            const dataStr = "data:text/csv;charset=utf-8," + encodeURIComponent(csv);
-            const dl = document.createElement("a");
-            dl.setAttribute("href", dataStr);
-            dl.setAttribute("download", `depdrift_audit_${Date.now()}.csv`);
-            dl.click();
-            showToast("Downloaded CSV audit file!");
-        });
-    }
-
-    // ── Repository Scanner (SSE) ───────────────────────────────────
-    function startGithubScan(target) {
-        ghScanBtn.disabled = true;
-        ghScanBtn.querySelector(".btn__text").hidden = true;
-        ghScanBtn.querySelector(".btn__loader").hidden = false;
-
-        scanStreamPanel.hidden = false;
-        scanStreamStatus.textContent = "Connecting to GitHub & registries…";
-        scanStreamCounter.textContent = "";
-        scanStreamLog.innerHTML = "";
-        auditWorkspace.hidden = true;
-
-        const url = "/api/scan?input=" + encodeURIComponent(target);
-        fetch(url).then(res => {
-            if (!res.ok) throw new Error(`HTTP error ${res.status}`);
-            const reader = res.body.getReader();
-            const decoder = new TextDecoder();
-            let buffer = "";
-
-            function read() {
-                reader.read().then(({ done, value }) => {
-                    if (done) {
-                        ghScanBtn.disabled = false;
-                        ghScanBtn.querySelector(".btn__text").hidden = false;
-                        ghScanBtn.querySelector(".btn__loader").hidden = true;
-                        return;
-                    }
-
-                    buffer += decoder.decode(value, { stream: true });
-                    const lines = buffer.split("\n");
-                    buffer = lines.pop();
-
-                    for (const line of lines) {
-                        if (line.startsWith("data: ")) {
-                            try {
-                                const payload = JSON.parse(line.slice(6));
-                                handleScanEvent(payload);
-                            } catch (e) {}
-                        }
-                    }
-                    read();
-                }).catch(err => {
-                    scanStreamStatus.textContent = "Stream error: " + err.message;
-                    ghScanBtn.disabled = false;
-                    ghScanBtn.querySelector(".btn__text").hidden = false;
-                    ghScanBtn.querySelector(".btn__loader").hidden = true;
-                });
-            }
-            read();
-        }).catch(err => {
-            scanStreamStatus.textContent = "Connection failed: " + err.message;
-            ghScanBtn.disabled = false;
-            ghScanBtn.querySelector(".btn__text").hidden = false;
-            ghScanBtn.querySelector(".btn__loader").hidden = true;
-        });
-    }
-
-    function handleScanEvent(data) {
-        if (data.message) {
-            scanStreamStatus.textContent = data.message;
-            const logItem = document.createElement("div");
-            logItem.textContent = `[${new Date().toLocaleTimeString()}] ${data.message}`;
-            scanStreamLog.appendChild(logItem);
-            scanStreamLog.scrollTop = scanStreamLog.scrollHeight;
-        }
-
-        if (data.progress) {
-            scanStreamCounter.textContent = data.progress;
-        }
-
-        if (data.status === "complete") {
-            scanStreamStatus.textContent = `Scan completed: ${data.message}`;
-            if (data.stats) updateMetrics(data.stats);
-            if (data.results) renderResults(data.results);
-            showToast("Repository scan completed successfully!");
-        } else if (data.status === "error") {
-            scanStreamStatus.textContent = `Error: ${data.message}`;
-            showToast("Scan failed: " + data.message);
-        }
-    }
-
-    if (ghScanForm) {
-        ghScanForm.addEventListener("submit", (e) => {
-            e.preventDefault();
-            const val = ghScanInput.value.trim();
-            if (val) startGithubScan(val);
-        });
-    }
-
-    // ── Direct Manifest Tab ────────────────────────────────────────
-    if (btnLoadExampleManifest) {
-        btnLoadExampleManifest.addEventListener("click", () => {
-            manifestTextarea.value = JSON.stringify({
-                "name": "my-production-app",
-                "version": "1.0.0",
-                "dependencies": {
-                    "express": "^4.21.0",
-                    "dotenv": "^16.4.5",
-                    "cors": "^2.8.5",
-                    "react": "^18.3.1",
-                    "react-dom": "^18.3.1",
-                    "lucide-react": "^0.300.0"
-                }
-            }, null, 2);
-            showToast("Example package.json loaded into editor.");
-        });
-    }
-
-    if (btnRunManifestAudit) {
-        btnRunManifestAudit.addEventListener("click", async () => {
-            const content = manifestTextarea.value.trim();
-            if (!content) {
-                showToast("Please paste manifest content or drop a file first.");
-                return;
-            }
-
-            const isJson = content.startsWith("{");
-            const filename = isJson ? "package.json" : "requirements.txt";
-
-            btnRunManifestAudit.disabled = true;
-            btnRunManifestAudit.querySelector(".btn__text").hidden = true;
-            btnRunManifestAudit.querySelector(".btn__loader").hidden = false;
-
-            try {
-                const res = await fetch("/api/scan/manifest", {
-                    method: "POST",
-                    headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({ filename, content })
-                });
-
-                if (!res.ok) {
-                    const err = await res.json();
-                    throw new Error(err.detail || "Manifest scan failed");
-                }
-
-                const data = await res.json();
-                switchTab("scanner");
-                if (data.stats) updateMetrics(data.stats);
-                if (data.results) renderResults(data.results);
-                showToast("Manifest audit completed!");
-            } catch (err) {
-                showToast("Error: " + err.message);
-            } finally {
-                btnRunManifestAudit.disabled = false;
-                btnRunManifestAudit.querySelector(".btn__text").hidden = false;
-                btnRunManifestAudit.querySelector(".btn__loader").hidden = true;
-            }
-        });
-    }
-
-    // Drag and drop for manifest file
-    if (fileDropZone) {
-        fileDropZone.addEventListener("click", () => manifestFileInput.click());
-        fileDropZone.addEventListener("dragover", (e) => {
-            e.preventDefault();
-            fileDropZone.style.borderColor = "var(--color-accent)";
-        });
-        fileDropZone.addEventListener("dragleave", () => fileDropZone.style.borderColor = "");
-        fileDropZone.addEventListener("drop", (e) => {
-            e.preventDefault();
-            fileDropZone.style.borderColor = "";
-            if (e.dataTransfer.files && e.dataTransfer.files[0]) {
-                handleManifestFile(e.dataTransfer.files[0]);
-            }
-        });
-        manifestFileInput.addEventListener("change", (e) => {
-            if (e.target.files && e.target.files[0]) {
-                handleManifestFile(e.target.files[0]);
-            }
-        });
-    }
-
-    function handleManifestFile(file) {
-        const reader = new FileReader();
-        reader.onload = (e) => {
-            manifestTextarea.value = e.target.result;
-            showToast(`Loaded ${file.name} into editor.`);
-        };
-        reader.readAsText(file);
-    }
-
-    // ── Single Package Inspector ───────────────────────────────────
-    if (inspectForm) {
-        inspectForm.addEventListener("submit", async (e) => {
-            e.preventDefault();
-            const name = inspectPkgName.value.trim();
-            const current_version = inspectCurrentVer.value.trim();
-            const ecosystem = inspectEcosystem.value;
-
-            btnRunInspect.disabled = true;
-            btnRunInspect.querySelector(".btn__text").hidden = true;
-            btnRunInspect.querySelector(".btn__loader").hidden = false;
-
-            try {
-                const res = await fetch("/api/inspect", {
-                    method: "POST",
-                    headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({ name, current_version, ecosystem })
-                });
-
-                if (!res.ok) throw new Error(`HTTP ${res.status}`);
-                const dep = await res.json();
-
-                inspectorResultPanel.hidden = false;
-                inspectorResultPanel.innerHTML = `
-                    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:1.25rem">
-                        <div>
-                            <h2 style="font-size:1.4rem; font-family:var(--font-mono); color:#fff">${esc(dep.name)}</h2>
-                            <div style="color:var(--text-muted); font-size:0.8rem">${esc(dep.ecosystem)} package</div>
-                        </div>
-                        <span class="badge badge--${esc(dep.risk)}">${esc(dep.risk)}</span>
-                    </div>
-
-                    <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(200px, 1fr)); gap:1rem; margin-bottom:1.25rem">
-                        <div style="background:var(--bg-input); padding:0.75rem 1rem; border-radius:6px">
-                            <span class="text-muted" style="font-size:0.75rem; text-transform:uppercase">Current Version</span>
-                            <div style="font-family:var(--font-mono); font-size:1.1rem; color:#fff"><code>${esc(dep.current_version)}</code></div>
-                        </div>
-                        <div style="background:var(--bg-input); padding:0.75rem 1rem; border-radius:6px">
-                            <span class="text-muted" style="font-size:0.75rem; text-transform:uppercase">Latest Upstream</span>
-                            <div style="font-family:var(--font-mono); font-size:1.1rem; color:var(--color-accent)"><code>${esc(dep.latest_version)}</code></div>
-                        </div>
-                        <div style="background:var(--bg-input); padding:0.75rem 1rem; border-radius:6px">
-                            <span class="text-muted" style="font-size:0.75rem; text-transform:uppercase">Drift Status</span>
-                            <div style="font-size:1.1rem; font-weight:600; color:${dep.is_outdated ? 'var(--color-breaking)' : 'var(--color-safe)'}">
-                                ${dep.is_outdated ? "Outdated" : "Current"}
-                            </div>
-                        </div>
-                    </div>
-
-                    <div style="margin-bottom:1rem">
-                        <div class="modal-section-title">Gemma 4 Risk Assessment</div>
-                        <div style="color:var(--text-primary); font-size:0.95rem; line-height:1.5">${esc(dep.summary)}</div>
-                    </div>
-
-                    <div style="margin-bottom:1.25rem">
-                        <div class="modal-section-title">Recommended Remediation</div>
-                        <div style="color:var(--text-primary); font-size:0.95rem; line-height:1.5">${esc(dep.action)}</div>
-                    </div>
-
-                    ${dep.update_command ? `
-                        <div style="margin-bottom:1.25rem">
-                            <div class="modal-section-title">Update Snippet</div>
-                            <div class="command-box">
-                                <code>${esc(dep.update_command)}</code>
-                                <button type="button" class="copy-btn" onclick="navigator.clipboard.writeText('${esc(dep.update_command)}'); showToast('Copied update command!');">Copy</button>
-                            </div>
-                        </div>
-                    ` : ""}
-
-                    ${dep.advisories && dep.advisories.length > 0 ? `
-                        <div style="margin-bottom:1.25rem">
-                            <div class="modal-section-title">Security Advisories (${dep.advisories.length})</div>
-                            <div style="display:flex; flex-direction:column; gap:0.5rem">
-                                ${dep.advisories.map(a => `
-                                    <div style="background:var(--bg-input); padding:0.6rem 0.8rem; border-radius:6px; border:1px solid rgba(239,68,68,0.2)">
-                                        <div style="display:flex; justify-content:space-between">
-                                            <strong style="color:var(--color-critical)">${esc(a.cve_id || a.ghsa_id)}</strong>
-                                            <span class="badge badge--CRITICAL">${esc(a.severity)}</span>
-                                        </div>
-                                        <div style="font-size:0.8rem; color:var(--text-secondary); margin-top:0.25rem">${esc(a.summary)}</div>
-                                    </div>
-                                `).join("")}
-                            </div>
-                        </div>
-                    ` : ""}
-
-                    ${dep.changelog_source === "browserbase" ? `
-                        <div style="background:rgba(0,216,246,0.06); border:1px solid rgba(0,216,246,0.2); border-radius:6px; padding:0.75rem; font-size:0.8rem; color:var(--color-browserbase)">
-                            🌐 Hydrated changelog was rendered and extracted via Browserbase headless cloud browser session (ID: ${esc(dep.browserbase_session || 'cloud')}).
-                        </div>
-                    ` : ""}
-                `;
-            } catch (err) {
-                showToast("Inspection failed: " + err.message);
-            } finally {
-                btnRunInspect.disabled = false;
-                btnRunInspect.querySelector(".btn__text").hidden = false;
-                btnRunInspect.querySelector(".btn__loader").hidden = true;
-            }
-        });
-    }
-
-    // ── Audit History Tab ──────────────────────────────────────────
-    async function loadAuditHistory() {
-        historyTableBody.innerHTML = `<tr><td colspan="9" class="text-center text-muted">Loading audit records from SQLite…</td></tr>`;
-        try {
-            const res = await fetch("/api/history?limit=30");
-            const audits = await res.json();
-
-            if (!audits || audits.length === 0) {
-                historyTableBody.innerHTML = `<tr><td colspan="9" class="text-center text-muted">No audit history found. Run a scan to persist results.</td></tr>`;
-                return;
-            }
-
-            historyTableBody.innerHTML = "";
-            for (const item of audits) {
-                const tr = document.createElement("tr");
-                const dateStr = new Date(item.created_at * 1000).toLocaleString();
-
-                tr.innerHTML = `
-                    <td><strong>${esc(item.target)}</strong></td>
-                    <td><span class="badge badge--SKIP">${esc(item.target_type)}</span></td>
-                    <td class="text-muted">${esc(dateStr)}</td>
-                    <td>${item.total_deps}</td>
-                    <td><span style="color:var(--color-breaking); font-weight:600">${item.outdated_count}</span></td>
-                    <td><span class="badge badge--CRITICAL">${item.critical_count}</span></td>
-                    <td><span class="badge badge--BREAKING">${item.breaking_count || 0}</span></td>
-                    <td><span class="badge badge--SAFE">${item.safe_count || 0}</span></td>
-                    <td>
-                        <button type="button" class="btn btn--outline btn--sm" data-action="load" data-id="${item.id}">View</button>
-                        <button type="button" class="btn btn--outline btn--sm" data-action="delete" data-id="${item.id}" style="color:var(--color-critical)">Delete</button>
-                    </td>
-                `;
-
-                tr.querySelector('[data-action="load"]').addEventListener("click", () => loadPastAudit(item.id));
-                tr.querySelector('[data-action="delete"]').addEventListener("click", () => deletePastAudit(item.id));
-                historyTableBody.appendChild(tr);
-            }
-        } catch (err) {
-            historyTableBody.innerHTML = `<tr><td colspan="9" class="text-center" style="color:var(--color-critical)">Failed to load history: ${esc(err.message)}</td></tr>`;
-        }
-    }
-
-    async function loadPastAudit(id) {
-        try {
-            const res = await fetch(`/api/history/${id}`);
-            if (!res.ok) throw new Error("Could not load audit");
-            const data = await res.json();
-            switchTab("scanner");
-            if (data.stats) updateMetrics(data.stats);
-            if (data.results) renderResults(data.results);
-            showToast(`Loaded audit record #${id} (${data.target})`);
-        } catch (err) {
-            showToast("Failed to load audit: " + err.message);
-        }
-    }
-
-    async function deletePastAudit(id) {
-        if (!confirm(`Delete audit record #${id}?`)) return;
-        try {
-            const res = await fetch(`/api/history/${id}`, { method: "DELETE" });
-            if (!res.ok) throw new Error("Delete failed");
-            showToast(`Deleted audit #${id}`);
-            loadAuditHistory();
-        } catch (err) {
-            showToast("Error: " + err.message);
-        }
-    }
-
-    if (btnRefreshHistory) btnRefreshHistory.addEventListener("click", loadAuditHistory);
-
-    // ── Diagnostics Tab ────────────────────────────────────────────
-    async function loadDiagnostics() {
-        const diagGrid = document.getElementById("diagnosticsGrid");
-        try {
-            const res = await fetch("/api/diagnostics");
-            const data = await res.json();
-
-            // GitHub
-            const ghInd = document.getElementById("diagGithubInd");
-            const ghBody = document.getElementById("diagGithubBody");
-            if (data.github.status === "connected") {
-                ghInd.className = "status-indicator status-indicator--green";
-                ghBody.innerHTML = `
-                    <div><strong>Status:</strong> Connected &amp; Authenticated</div>
-                    <div><strong>Rate Limit:</strong> ${data.github.rate_limit_remaining} / ${data.github.rate_limit_limit} req/hr</div>
-                    <div><strong>Auth:</strong> Personal Access Token configured</div>
-                `;
-            } else {
-                ghInd.className = "status-indicator status-indicator--gray";
-                ghBody.innerHTML = `<div>Status: ${esc(data.github.status)}</div>`;
-            }
-
-            // Browserbase
-            const bbInd = document.getElementById("diagBrowserbaseInd");
-            const bbBody = document.getElementById("diagBrowserbaseBody");
-            if (data.browserbase.status === "ready") {
-                bbInd.className = "status-indicator status-indicator--green";
-                bbBody.innerHTML = `
-                    <div><strong>Status:</strong> Cloud Headless Browser Operational</div>
-                    <div><strong>API Key:</strong> Configured</div>
-                    <div><strong>Project ID:</strong> ${esc(data.browserbase.project_id || 'default')}</div>
-                    <div><strong>Protocol:</strong> Playwright over CDP</div>
-                `;
-            } else {
-                bbInd.className = "status-indicator status-indicator--gray";
-                bbBody.innerHTML = `<div>Status: ${esc(data.browserbase.status)}</div>`;
-            }
-
-            // Gemma
-            const gmInd = document.getElementById("diagGemmaInd");
-            const gmBody = document.getElementById("diagGemmaBody");
-            if (data.gemma.status === "ready") {
-                gmInd.className = "status-indicator status-indicator--green";
-                gmBody.innerHTML = `
-                    <div><strong>Status:</strong> Open Weights Ready</div>
-                    <div><strong>Model:</strong> ${esc(data.gemma.model)}</div>
-                    <div><strong>Provider:</strong> ${esc(data.gemma.provider)}</div>
-                    <div><strong>Inference:</strong> Low-temp structured JSON validation</div>
-                `;
-            } else {
-                gmInd.className = "status-indicator status-indicator--gray";
-                gmBody.innerHTML = `<div>Status: ${esc(data.gemma.status)}</div>`;
-            }
-
-            // Registries
-            const regInd = document.getElementById("diagRegistriesInd");
-            const regBody = document.getElementById("diagRegistriesBody");
-            const npmOp = data.registries.npm === "operational";
-            const pypiOp = data.registries.pypi === "operational";
-            regInd.className = `status-indicator ${npmOp && pypiOp ? 'status-indicator--green' : 'status-indicator--gray'}`;
-            regBody.innerHTML = `
-                <div><strong>npm Registry:</strong> ${npmOp ? 'Operational (registry.npmjs.org)' : 'Degraded'}</div>
-                <div><strong>PyPI Registry:</strong> ${pypiOp ? 'Operational (pypi.org)' : 'Degraded'}</div>
-                <div><strong>Semver Parsing:</strong> Native semver resolution</div>
-            `;
-        } catch (err) {
-            showToast("Diagnostics check failed: " + err.message);
-        }
-    }
-
-    if (btnRunDiagnostics) btnRunDiagnostics.addEventListener("click", loadDiagnostics);
-
-    // ── Ambient Background Canvas ──────────────────────────────────
-    (function initAmbient() {
-        const canvas = document.getElementById("ambient-canvas");
+    const form             = document.getElementById("scanForm");
+    const input            = document.getElementById("scanInput");
+    const btn              = document.getElementById("scanBtn");
+    const btnText          = btn ? btn.querySelector(".scan-form__btn-text") : null;
+    const btnLoading       = btn ? btn.querySelector(".scan-form__btn-loading") : null;
+    const logSection       = document.getElementById("logSection");
+    const logText          = document.getElementById("logText");
+    const statsSection     = document.getElementById("statsSection");
+    const resultsSection   = document.getElementById("resultsSection");
+    const resultsContainer = document.getElementById("resultsContainer");
+    const actionStrip      = document.getElementById("actionStrip");
+    const footer           = document.getElementById("footer");
+    const toastContainer   = document.getElementById("toastContainer");
+
+    // Modal References
+    const modalPasteManifest  = document.getElementById("modalPasteManifest");
+    const btnOpenPaste        = document.getElementById("btnOpenPaste");
+    const btnClosePaste       = document.getElementById("btnClosePaste");
+    const manifestInputArea   = document.getElementById("manifestInputArea");
+    const btnSubmitManifest   = document.getElementById("btnSubmitManifest");
+    const btnLoadSampleManifest = document.getElementById("btnLoadSampleManifest");
+
+    const modalSingleInspect  = document.getElementById("modalSingleInspect");
+    const btnOpenInspect      = document.getElementById("btnOpenInspect");
+    const btnCloseInspect     = document.getElementById("btnCloseInspect");
+    const inspectName         = document.getElementById("inspectName");
+    const inspectVersion      = document.getElementById("inspectVersion");
+    const inspectEco          = document.getElementById("inspectEco");
+    const btnRunInspectPkg    = document.getElementById("btnRunInspectPkg");
+    const singleInspectResult = document.getElementById("singleInspectResult");
+
+    const modalDiagnostics    = document.getElementById("modalDiagnostics");
+    const btnOpenDiag         = document.getElementById("btnOpenDiag");
+    const btnCloseDiag        = document.getElementById("btnCloseDiag");
+    const diagModalBody       = document.getElementById("diagModalBody");
+
+    const depDetailModal      = document.getElementById("depDetailModal");
+    const btnCloseDetail      = document.getElementById("btnCloseDetail");
+    const detailDepName       = document.getElementById("detailDepName");
+    const detailDepBadge      = document.getElementById("detailDepBadge");
+    const detailModalBody     = document.getElementById("detailModalBody");
+
+    // Batch & Export buttons
+    const btnBatchSafe        = document.getElementById("btnBatchSafe");
+    const btnExportPR         = document.getElementById("btnExportPR");
+    const btnExportJSON       = document.getElementById("btnExportJSON");
+
+    // ── Particle Starfield Canvas ──────────────────────────────────
+    (function initParticles() {
+        const canvas = document.getElementById("particles");
         if (!canvas) return;
         const ctx = canvas.getContext("2d");
         let w, h;
-        const dots = [];
-        const COUNT = 45;
+        const particles = [];
+        const COUNT = 65;
 
         function resize() {
             w = canvas.width = window.innerWidth;
@@ -928,38 +84,124 @@
         window.addEventListener("resize", resize);
 
         for (let i = 0; i < COUNT; i++) {
-            dots.push({
+            particles.push({
                 x: Math.random() * w,
                 y: Math.random() * h,
-                r: Math.random() * 1.5 + 0.5,
-                vx: (Math.random() - 0.5) * 0.25,
-                vy: (Math.random() - 0.5) * 0.25,
-                a: Math.random() * 0.5 + 0.15
+                r: Math.random() * 1.6 + 0.4,
+                dx: (Math.random() - 0.5) * 0.35,
+                dy: (Math.random() - 0.5) * 0.35,
+                a: Math.random() * 0.45 + 0.15,
             });
         }
 
-        function loop() {
+        function draw() {
             ctx.clearRect(0, 0, w, h);
-            for (const d of dots) {
-                d.x += d.vx;
-                d.y += d.vy;
-                if (d.x < 0) d.x = w;
-                if (d.x > w) d.x = 0;
-                if (d.y < 0) d.y = h;
-                if (d.y > h) d.y = 0;
+            for (const p of particles) {
+                p.x += p.dx;
+                p.y += p.dy;
+                if (p.x < 0) p.x = w;
+                if (p.x > w) p.x = 0;
+                if (p.y < 0) p.y = h;
+                if (p.y > h) p.y = 0;
 
                 ctx.beginPath();
-                ctx.arc(d.x, d.y, d.r, 0, Math.PI * 2);
-                ctx.fillStyle = `rgba(56, 189, 248, ${d.a})`;
+                ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2);
+                ctx.fillStyle = "rgba(0, 201, 219, " + p.a + ")";
                 ctx.fill();
             }
-            requestAnimationFrame(loop);
+            requestAnimationFrame(draw);
         }
-        loop();
+        draw();
     })();
 
-    // ── Helper: Escape HTML ────────────────────────────────────────
-    function esc(str) {
+    // ── Toast Helper ───────────────────────────────────────────────
+    function showToast(msg, duration = 3000) {
+        if (!toastContainer) return;
+        const toast = document.createElement("div");
+        toast.className = "toast";
+        toast.textContent = msg;
+        toastContainer.appendChild(toast);
+        setTimeout(() => {
+            toast.style.opacity = "0";
+            toast.style.transition = "opacity 0.3s";
+            setTimeout(() => toast.remove(), 300);
+        }, duration);
+    }
+
+    // ── Quick-Fill Buttons ─────────────────────────────────────────
+    document.querySelectorAll(".link-btn[data-fill]").forEach(function (el) {
+        el.addEventListener("click", function () {
+            if (input) {
+                input.value = el.dataset.fill;
+                input.focus();
+            }
+        });
+    });
+
+    // ── Counter Animation ──────────────────────────────────────────
+    function animateCounter(el, target) {
+        if (!el) return;
+        const duration = 800;
+        const start = performance.now();
+        const from = parseInt(el.textContent, 10) || 0;
+        const diff = target - from;
+
+        function step(now) {
+            const t = Math.min((now - start) / duration, 1);
+            const ease = 1 - Math.pow(1 - t, 3);
+            el.textContent = Math.round(from + diff * ease);
+            if (t < 1) requestAnimationFrame(step);
+        }
+        requestAnimationFrame(step);
+    }
+
+    function updateStats(stats) {
+        if (!statsSection) return;
+        statsSection.hidden = false;
+        animateCounter(document.querySelector("#statTotal .stat-card__number"), stats.total_deps || stats.total || 0);
+        animateCounter(document.querySelector("#statOutdated .stat-card__number"), stats.outdated || 0);
+        animateCounter(document.querySelector("#statCritical .stat-card__number"), stats.critical || 0);
+        animateCounter(document.querySelector("#statBrowserbase .stat-card__number"), stats.browserbase_extractions || 0);
+        animateCounter(document.querySelector("#statSaved .stat-card__number"), stats.time_saved_minutes || 0);
+    }
+
+    function updateFilterCounts(results) {
+        let total = 0, critical = 0, breaking = 0, safe = 0, current = 0;
+        for (const repo of results) {
+            for (const dep of (repo.dependencies || [])) {
+                total++;
+                if (dep.risk === "CRITICAL") critical++;
+                else if (dep.risk === "BREAKING") breaking++;
+                else if (dep.risk === "SAFE") safe++;
+                else if (dep.risk === "CURRENT") current++;
+            }
+        }
+        const setVal = (id, val) => {
+            const el = document.getElementById(id);
+            if (el) el.textContent = val;
+        };
+        setVal("countAll", total);
+        setVal("countCritical", critical);
+        setVal("countBreaking", breaking);
+        setVal("countSafe", safe);
+        setVal("countCurrent", current);
+    }
+
+    // ── UI State Helpers ───────────────────────────────────────────
+    function setLoading(loading) {
+        if (!btn) return;
+        btn.disabled = loading;
+        if (btnText) btnText.hidden = loading;
+        if (btnLoading) btnLoading.hidden = !loading;
+    }
+
+    function showError(msg) {
+        if (!logSection || !logText) return;
+        logSection.hidden = false;
+        logText.innerHTML = '<span style="color:var(--critical)">' + escHtml(msg) + '</span>';
+    }
+
+    function escHtml(str) {
         if (!str) return "";
         return String(str)
             .replace(/&/g, "&amp;")
@@ -969,12 +211,531 @@
             .replace(/'/g, "&#039;");
     }
 
-    // ── Initial Check ──────────────────────────────────────────────
-    fetch("/api/diagnostics").then(r => r.json()).then(data => {
-        const badge = document.getElementById("systemStatusText");
-        if (data.github && data.github.rate_limit_remaining) {
-            badge.textContent = `Operational · Rate Limit: ${data.github.rate_limit_remaining}/5000`;
+    // ── Render Results ─────────────────────────────────────────────
+    function renderResults(results) {
+        currentResults = results;
+        if (!resultsSection || !resultsContainer) return;
+        resultsSection.hidden = false;
+        resultsContainer.innerHTML = "";
+
+        if (actionStrip) actionStrip.hidden = false;
+        updateFilterCounts(results);
+
+        const order = { CRITICAL: 0, BREAKING: 1, SAFE: 2, SKIP: 3, CURRENT: 4, UNKNOWN: 5 };
+
+        for (const repo of results) {
+            const deps = (repo.dependencies || []).filter(function (dep) {
+                if (activeFilter === "ALL") return true;
+                return dep.risk === activeFilter;
+            });
+
+            if (deps.length === 0 && activeFilter !== "ALL") continue;
+
+            const group = document.createElement("div");
+            group.className = "repo-group";
+
+            // Repo header
+            const header = document.createElement("div");
+            header.className = "repo-group__header";
+            header.innerHTML =
+                '<span class="repo-group__name">' +
+                    '<a href="' + escHtml(repo.repo_url) + '" target="_blank" rel="noopener">' +
+                        escHtml(repo.repo_name) +
+                    '</a>' +
+                '</span>' +
+                '<span class="repo-group__stats">' +
+                    repo.total + ' deps · ' +
+                    repo.outdated + ' outdated · ' +
+                    repo.critical + ' critical' +
+                '</span>';
+            group.appendChild(header);
+
+            // Sort dependencies by risk priority
+            const sorted = [...deps].sort(function (a, b) {
+                return (order[a.risk] ?? 9) - (order[b.risk] ?? 9);
+            });
+
+            for (const dep of sorted) {
+                const card = document.createElement("div");
+                card.className = "dep-card";
+                card.style.animationDelay = (sorted.indexOf(dep) * 0.03) + "s";
+
+                let html =
+                    '<div class="dep-card__name">' + escHtml(dep.name) + '</div>' +
+                    '<span class="dep-card__badge badge--' + dep.risk + '">' + dep.risk + '</span>';
+
+                if (dep.is_outdated) {
+                    html +=
+                        '<div class="dep-card__version">' +
+                            '<code>' + escHtml(dep.current_version) + '</code>' +
+                            '<span class="arrow"> → </span>' +
+                            '<code class="latest">' + escHtml(dep.latest_version) + '</code>' +
+                        '</div>';
+                } else {
+                    html +=
+                        '<div class="dep-card__version">' +
+                            '<code>' + escHtml(dep.current_version) + ' (latest)</code>' +
+                        '</div>';
+                }
+
+                // Browserbase session badge
+                if (dep.changelog_source === "browserbase" || dep.browserbase_session) {
+                    const sid = dep.browserbase_session ? dep.browserbase_session.slice(0, 8) : "cloud";
+                    html +=
+                        '<div class="dep-card__bb-tag">' +
+                            '<span class="bb-pill">🌐 Browserbase Extracted</span>' +
+                            '<span class="bb-session">Session: ' + escHtml(sid) + '…</span>' +
+                        '</div>';
+                }
+
+                // Security advisories / CVE alert
+                if (dep.advisories && dep.advisories.length > 0) {
+                    const adv = dep.advisories[0];
+                    html +=
+                        '<div class="dep-card__cve-banner">' +
+                            '⚠️ <strong>' + escHtml(adv.ghsa_id || adv.cve_id || "Vulnerability") + '</strong>: ' +
+                            escHtml(adv.summary || "Security advisory detected.") +
+                        '</div>';
+                }
+
+                if (dep.summary && dep.risk !== "CURRENT") {
+                    html += '<div class="dep-card__summary">' + escHtml(dep.summary) + '</div>';
+                }
+                if (dep.action && dep.risk !== "CURRENT") {
+                    html += '<div class="dep-card__action">' + escHtml(dep.action) + '</div>';
+                }
+                if (dep.changelog_url) {
+                    html +=
+                        '<a class="dep-card__link" href="' + escHtml(dep.changelog_url) +
+                        '" target="_blank" rel="noopener" onclick="event.stopPropagation();">View changelog →</a>';
+                }
+
+                card.innerHTML = html;
+
+                // Click card to open full details modal
+                card.addEventListener("click", function () {
+                    openDepModal(dep, repo.repo_name);
+                });
+
+                group.appendChild(card);
+            }
+
+            resultsContainer.appendChild(group);
         }
-    }).catch(() => {});
+    }
+
+    // ── Detail Modal ───────────────────────────────────────────────
+    function openDepModal(dep, repoName) {
+        if (!depDetailModal) return;
+        detailDepName.textContent = dep.name;
+        detailDepBadge.className = "dep-card__badge badge--" + dep.risk;
+        detailDepBadge.textContent = dep.risk;
+
+        let bodyHtml =
+            '<div style="margin-bottom:14px; font-family:var(--font-mono); font-size:0.9rem">' +
+                '<strong>Repository:</strong> ' + escHtml(repoName) + '<br>' +
+                '<strong>Current Version:</strong> ' + escHtml(dep.current_version) + '<br>' +
+                '<strong>Latest Version:</strong> ' + escHtml(dep.latest_version) + '<br>' +
+                '<strong>Ecosystem:</strong> ' + escHtml(dep.ecosystem) +
+            '</div>';
+
+        if (dep.update_command) {
+            bodyHtml +=
+                '<div style="margin-bottom:14px">' +
+                    '<div style="font-size:0.75rem; color:var(--text-muted); text-transform:uppercase; margin-bottom:4px">Recommended Update Command</div>' +
+                    '<div style="display:flex; gap:8px; align-items:center">' +
+                        '<code style="background:rgba(0,0,0,0.4); padding:8px 12px; border-radius:6px; flex:1; font-size:0.85rem">' + escHtml(dep.update_command) + '</code>' +
+                        '<button type="button" class="btn-action" id="btnCopySingleCmd">Copy</button>' +
+                    '</div>' +
+                '</div>';
+        }
+
+        if (dep.advisories && dep.advisories.length > 0) {
+            bodyHtml += '<div style="margin-bottom:14px"><h4 style="color:var(--critical); font-size:0.9rem; margin-bottom:6px">Security Advisories (CVEs)</h4>';
+            for (const adv of dep.advisories) {
+                bodyHtml +=
+                    '<div style="padding:10px; background:rgba(255,71,87,0.1); border:1px solid rgba(255,71,87,0.3); border-radius:6px; margin-bottom:6px; font-size:0.82rem">' +
+                        '<strong>' + escHtml(adv.ghsa_id || adv.cve_id) + '</strong> (' + escHtml(adv.severity) + ')<br>' +
+                        escHtml(adv.summary) + '<br>' +
+                        '<a href="' + escHtml(adv.url) + '" target="_blank" rel="noopener" style="color:var(--cyan); margin-top:4px; display:inline-block">Read full advisory →</a>' +
+                    '</div>';
+            }
+            bodyHtml += '</div>';
+        }
+
+        bodyHtml +=
+            '<div style="margin-bottom:14px">' +
+                '<h4 style="font-size:0.9rem; margin-bottom:4px">Gemma 4 Analysis</h4>' +
+                '<p style="font-size:0.86rem; color:var(--text-secondary)">' + escHtml(dep.summary) + '</p>' +
+                '<p style="font-size:0.82rem; color:var(--text-muted); font-style:italic; margin-top:4px">' + escHtml(dep.action) + '</p>' +
+            '</div>';
+
+        detailModalBody.innerHTML = bodyHtml;
+
+        const copyBtn = document.getElementById("btnCopySingleCmd");
+        if (copyBtn && dep.update_command) {
+            copyBtn.addEventListener("click", function () {
+                navigator.clipboard.writeText(dep.update_command).then(() => {
+                    showToast("Copied update command!");
+                });
+            });
+        }
+
+        depDetailModal.hidden = false;
+    }
+
+    if (btnCloseDetail) {
+        btnCloseDetail.addEventListener("click", () => depDetailModal.hidden = true);
+    }
+    if (depDetailModal) {
+        depDetailModal.addEventListener("click", function (e) {
+            if (e.target === depDetailModal) depDetailModal.hidden = true;
+        });
+    }
+
+    // ── Filter Pills Handling ──────────────────────────────────────
+    document.querySelectorAll(".filter-pill").forEach(function (pill) {
+        pill.addEventListener("click", function () {
+            document.querySelectorAll(".filter-pill").forEach(p => p.classList.remove("active"));
+            pill.classList.add("active");
+            activeFilter = pill.dataset.filter || "ALL";
+            if (currentResults.length > 0) {
+                renderResults(currentResults);
+            }
+        });
+    });
+
+    // ── Batch Actions ──────────────────────────────────────────────
+    if (btnBatchSafe) {
+        btnBatchSafe.addEventListener("click", function () {
+            const cmds = [];
+            for (const repo of currentResults) {
+                for (const dep of (repo.dependencies || [])) {
+                    if (dep.risk === "SAFE" && dep.update_command) {
+                        cmds.push(dep.update_command);
+                    }
+                }
+            }
+            if (cmds.length === 0) {
+                showToast("No SAFE updates available in current audit.");
+                return;
+            }
+            const script = cmds.join(" && ");
+            navigator.clipboard.writeText(script).then(() => {
+                showToast("Copied " + cmds.length + " safe update commands!");
+            });
+        });
+    }
+
+    if (btnExportPR) {
+        btnExportPR.addEventListener("click", function () {
+            let md = "## 🔄 DepDrift Dependency Audit Report\n\n";
+            md += "| Package | Current | Latest | Risk | Recommendation |\n";
+            md += "| :--- | :--- | :--- | :--- | :--- |\n";
+
+            let count = 0;
+            for (const repo of currentResults) {
+                for (const dep of (repo.dependencies || [])) {
+                    if (dep.is_outdated) {
+                        count++;
+                        md += `| **${dep.name}** | \`${dep.current_version}\` | \`${dep.latest_version}\` | **${dep.risk}** | ${dep.summary} |\n`;
+                    }
+                }
+            }
+
+            if (count === 0) {
+                showToast("No outdated dependencies to export.");
+                return;
+            }
+
+            md += "\n*Audited by [DepDrift](https://github.com/x-tahosin/depdrift) with Gemma 4 & Browserbase.*";
+            navigator.clipboard.writeText(md).then(() => {
+                showToast("Copied PR Markdown report to clipboard!");
+            });
+        });
+    }
+
+    if (btnExportJSON) {
+        btnExportJSON.addEventListener("click", function () {
+            if (currentResults.length === 0) {
+                showToast("No audit data to export.");
+                return;
+            }
+            const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify({
+                stats: currentStats,
+                results: currentResults,
+                exported_at: new Date().toISOString()
+            }, null, 2));
+            const dl = document.createElement("a");
+            dl.setAttribute("href", dataStr);
+            dl.setAttribute("download", "depdrift-audit.json");
+            dl.click();
+            showToast("Downloaded audit JSON file.");
+        });
+    }
+
+    // ── SSE Scanner Engine ─────────────────────────────────────────
+    function startScan(query) {
+        setLoading(true);
+        if (logSection) logSection.hidden = false;
+        if (logText) logText.textContent = "Connecting to DepDrift engine…";
+        if (statsSection) statsSection.hidden = true;
+        if (actionStrip) actionStrip.hidden = true;
+        if (resultsSection) resultsSection.hidden = true;
+        if (resultsContainer) resultsContainer.innerHTML = "";
+        if (footer) footer.hidden = true;
+
+        const url = "/api/scan?input=" + encodeURIComponent(query);
+
+        fetch(url).then(function (response) {
+            if (!response.ok) {
+                throw new Error("Server returned HTTP " + response.status);
+            }
+            const reader = response.body.getReader();
+            const decoder = new TextDecoder();
+            let buffer = "";
+
+            function read() {
+                reader.read().then(function (result) {
+                    if (result.done) {
+                        setLoading(false);
+                        return;
+                    }
+
+                    buffer += decoder.decode(result.value, { stream: true });
+                    const lines = buffer.split("\n");
+                    buffer = lines.pop();
+
+                    for (const line of lines) {
+                        if (line.startsWith("data: ")) {
+                            try {
+                                const data = JSON.parse(line.slice(6));
+                                handleEvent(data);
+                            } catch (e) {
+                                // ignore partial json
+                            }
+                        }
+                    }
+
+                    read();
+                }).catch(function (err) {
+                    showError("Stream error: " + err.message);
+                    setLoading(false);
+                });
+            }
+            read();
+        }).catch(function (err) {
+            showError("Connection failed: " + err.message);
+            setLoading(false);
+        });
+    }
+
+    function handleEvent(data) {
+        switch (data.status) {
+            case "scanning":
+            case "checking":
+            case "analyzing":
+                if (logText) logText.textContent = data.message || "Auditing dependencies…";
+                break;
+
+            case "repo_done":
+                if (logText) logText.textContent = data.message || "Repository completed.";
+                break;
+
+            case "complete":
+                if (logText) logText.textContent = data.message || "Scan finished.";
+                currentStats = data.stats || {};
+                currentResults = data.results || [];
+                if (data.stats) updateStats(data.stats);
+                if (data.results) renderResults(data.results);
+                if (footer) footer.hidden = false;
+                break;
+
+            case "error":
+                showError(data.message || "An error occurred during scan.");
+                break;
+        }
+    }
+
+    // ── Form Submit ────────────────────────────────────────────────
+    if (form) {
+        form.addEventListener("submit", function (e) {
+            e.preventDefault();
+            const query = input.value.trim();
+            if (!query) return;
+            startScan(query);
+        });
+    }
+
+    // ── Modal Handlers: Paste Manifest ─────────────────────────────
+    if (btnOpenPaste) {
+        btnOpenPaste.addEventListener("click", () => modalPasteManifest.hidden = false);
+    }
+    if (btnClosePaste) {
+        btnClosePaste.addEventListener("click", () => modalPasteManifest.hidden = true);
+    }
+    if (modalPasteManifest) {
+        modalPasteManifest.addEventListener("click", (e) => {
+            if (e.target === modalPasteManifest) modalPasteManifest.hidden = true;
+        });
+    }
+    if (btnLoadSampleManifest) {
+        btnLoadSampleManifest.addEventListener("click", function () {
+            manifestInputArea.value = JSON.stringify({
+                name: "sample-project",
+                dependencies: {
+                    "express": "^4.21.0",
+                    "dotenv": "^16.4.5",
+                    "axios": "^1.6.0"
+                }
+            }, null, 2);
+        });
+    }
+    if (btnSubmitManifest) {
+        btnSubmitManifest.addEventListener("click", function () {
+            const content = manifestInputArea.value.trim();
+            if (!content) {
+                showToast("Please paste a manifest first.");
+                return;
+            }
+            modalPasteManifest.hidden = true;
+            setLoading(true);
+            if (logSection) logSection.hidden = false;
+            if (logText) logText.textContent = "Auditing pasted manifest…";
+
+            fetch("/api/scan/manifest", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ filename: "package.json", content: content })
+            })
+            .then(res => {
+                if (!res.ok) throw new Error("HTTP " + res.status);
+                return res.json();
+            })
+            .then(data => {
+                setLoading(false);
+                if (logText) logText.textContent = "Manifest audit complete.";
+                const repoRes = {
+                    repo_name: "pasted/manifest",
+                    repo_url: "#",
+                    total: data.total,
+                    outdated: data.outdated,
+                    critical: data.critical,
+                    dependencies: data.dependencies
+                };
+                updateStats(data);
+                renderResults([repoRes]);
+                if (footer) footer.hidden = false;
+            })
+            .catch(err => {
+                setLoading(false);
+                showError("Manifest audit failed: " + err.message);
+            });
+        });
+    }
+
+    // ── Modal Handlers: Single Package Inspector ───────────────────
+    if (btnOpenInspect) {
+        btnOpenInspect.addEventListener("click", () => modalSingleInspect.hidden = false);
+    }
+    if (btnCloseInspect) {
+        btnCloseInspect.addEventListener("click", () => modalSingleInspect.hidden = true);
+    }
+    if (modalSingleInspect) {
+        modalSingleInspect.addEventListener("click", (e) => {
+            if (e.target === modalSingleInspect) modalSingleInspect.hidden = true;
+        });
+    }
+    if (btnRunInspectPkg) {
+        btnRunInspectPkg.addEventListener("click", function () {
+            const name = inspectName.value.trim();
+            const ver = inspectVersion.value.trim();
+            const eco = inspectEco.value;
+            if (!name || !ver) return;
+
+            btnRunInspectPkg.disabled = true;
+            singleInspectResult.hidden = false;
+            singleInspectResult.innerHTML = '<span class="spinner spinner--sm"></span> Inspecting package upstream…';
+
+            const url = "/api/inspect?name=" + encodeURIComponent(name) +
+                        "&current_version=" + encodeURIComponent(ver) +
+                        "&ecosystem=" + encodeURIComponent(eco);
+
+            fetch(url)
+                .then(res => {
+                    if (!res.ok) throw new Error("HTTP " + res.status);
+                    return res.json();
+                })
+                .then(data => {
+                    btnRunInspectPkg.disabled = false;
+                    let html =
+                        '<div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px">' +
+                            '<strong>' + escHtml(data.name) + '</strong>' +
+                            '<span class="dep-card__badge badge--' + data.risk + '">' + data.risk + '</span>' +
+                        '</div>' +
+                        '<div style="font-family:var(--font-mono); font-size:0.8rem; margin-bottom:8px">' +
+                            escHtml(data.current_version) + ' → ' + escHtml(data.latest_version) +
+                        '</div>' +
+                        '<p style="color:var(--text-secondary); margin-bottom:6px">' + escHtml(data.summary) + '</p>' +
+                        '<p style="color:var(--text-muted); font-style:italic">' + escHtml(data.action) + '</p>';
+                    if (data.changelog_url) {
+                        html += '<a href="' + escHtml(data.changelog_url) + '" target="_blank" rel="noopener" style="color:var(--cyan); margin-top:6px; display:inline-block">View changelog →</a>';
+                    }
+                    singleInspectResult.innerHTML = html;
+                })
+                .catch(err => {
+                    btnRunInspectPkg.disabled = false;
+                    singleInspectResult.innerHTML = '<span style="color:var(--critical)">Error: ' + escHtml(err.message) + '</span>';
+                });
+        });
+    }
+
+    // ── Modal Handlers: System Diagnostics ─────────────────────────
+    if (btnOpenDiag) {
+        btnOpenDiag.addEventListener("click", function () {
+            modalDiagnostics.hidden = false;
+            diagModalBody.innerHTML = '<div class="diag-loading"><span class="spinner spinner--sm"></span> Checking system connections…</div>';
+
+            fetch("/api/diagnostics")
+                .then(res => res.json())
+                .then(data => {
+                    let html = "";
+                    const bb = data.browserbase || {};
+                    const gh = data.github || {};
+                    const gemma = data.gemma || {};
+                    const items = [
+                        { name: "Browserbase Cloud Browser", ok: bb.configured || bb.status === "ready", detail: bb.project_id ? "Project ID: " + bb.project_id : "API Key active" },
+                        { name: "GitHub Authenticated PAT", ok: gh.authenticated || gh.status === "connected", detail: gh.rate_limit_remaining !== undefined ? gh.rate_limit_remaining + "/5000 req/hr remaining" : "Rate limit active" },
+                        { name: "Gemma 4 AI Engine", ok: gemma.configured || gemma.status === "ready", detail: "Model: " + (gemma.model || "gemma-4-26b-a4b-it") },
+                        { name: "SQLite Persistence Engine", ok: true, detail: "Path: data/depdrift.db" }
+                    ];
+
+                    for (const it of items) {
+                        html +=
+                            '<div class="diag-item">' +
+                                '<div>' +
+                                    '<strong>' + escHtml(it.name) + '</strong><br>' +
+                                    '<span style="font-size:0.75rem; color:var(--text-muted)">' + escHtml(it.detail) + '</span>' +
+                                '</div>' +
+                                '<span class="' + (it.ok ? 'diag-status--ok' : 'diag-status--warn') + '">' +
+                                    (it.ok ? '● ACTIVE' : '○ PENDING') +
+                                '</span>' +
+                            '</div>';
+                    }
+                    diagModalBody.innerHTML = html;
+                })
+                .catch(err => {
+                    diagModalBody.innerHTML = '<span style="color:var(--critical)">Diagnostics check failed: ' + escHtml(err.message) + '</span>';
+                });
+        });
+    }
+    if (btnCloseDiag) {
+        btnCloseDiag.addEventListener("click", () => modalDiagnostics.hidden = true);
+    }
+    if (modalDiagnostics) {
+        modalDiagnostics.addEventListener("click", (e) => {
+            if (e.target === modalDiagnostics) modalDiagnostics.hidden = true;
+        });
+    }
 
 })();
