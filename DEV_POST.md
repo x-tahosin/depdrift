@@ -6,8 +6,6 @@ canonical_url: https://github.com/x-tahosin/depdrift
 cover_image: https://raw.githubusercontent.com/x-tahosin/depdrift/main/docs/cover.png
 ---
 
-![DepDrift Banner](https://raw.githubusercontent.com/x-tahosin/depdrift/main/docs/cover.png)
-
 *This is a submission for the [Hacktoberfest Open-Source AI Challenge Week 3: Slow and Steady](https://dev.to/challenges/hacktoberfest-week3-2026-10-19)*
 
 ---
