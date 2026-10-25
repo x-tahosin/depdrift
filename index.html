@@ -3,109 +3,502 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>DepDrift — AI Changelog Reader for Outdated Dependencies</title>
-    <meta name="description" content="DepDrift scans your GitHub repositories for outdated dependencies, uses Browserbase to extract release notes, and runs Gemma 4 to classify updates by risk.">
+    <title>DepDrift — Continuous Dependency Drift & Breaking Change Analyzer</title>
+    <meta name="description" content="Production dependency changelog analyzer powered by Browserbase headless cloud browser and Gemma 4 open weights. Detects breaking API changes and CVEs before your builds break.">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&family=Outfit:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="/static/style.css">
 </head>
-<body>
-    <!-- Background particles -->
-    <canvas id="particles" class="particles"></canvas>
+<body class="theme-dark">
+    <!-- Background Canvas -->
+    <canvas id="ambient-canvas" class="ambient-canvas"></canvas>
 
-    <div class="container">
-        <!-- Hero -->
-        <header class="hero">
-            <div class="hero__badge">
-                <span class="pulse-dot"></span>
-                <span>Hacktoberfest 2026 · Week 3: Slow &amp; Steady</span>
-            </div>
-            <h1 class="hero__title">
-                <span class="gradient-text">DepDrift</span>
-            </h1>
-            <p class="hero__tagline">The AI that reads the changelogs you're too lazy to read.</p>
-            <p class="hero__sub">
-                Gemma 4 + Browserbase headless cloud browser. Scans your GitHub repos for outdated packages, extracts dynamic release notes, and flags breaking changes before you update.
-            </p>
-
-            <!-- Scan form -->
-            <form class="scan-form" id="scanForm">
-                <div class="scan-form__group">
-                    <input
-                        type="text"
-                        class="scan-form__input"
-                        id="scanInput"
-                        placeholder="GitHub username (e.g. x-tahosin) or owner/repo"
-                        autocomplete="off"
-                        spellcheck="false"
-                        required
-                    >
-                    <button type="submit" class="scan-form__btn" id="scanBtn">
-                        <span class="scan-form__btn-text">Scan</span>
-                        <span class="scan-form__btn-loading" hidden>
-                            <span class="spinner"></span>
-                        </span>
-                    </button>
+    <!-- App Wrapper -->
+    <div class="app-layout">
+        <!-- Top Navigation Bar -->
+        <header class="topbar">
+            <div class="topbar__brand">
+                <div class="brand-logo">
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/>
+                    </svg>
                 </div>
-                <p class="scan-form__hint">
-                    Try <button type="button" class="link-btn" data-fill="x-tahosin">x-tahosin</button>
-                    or <button type="button" class="link-btn" data-fill="expressjs/express">expressjs/express</button>
-                </p>
-            </form>
+                <div class="brand-text">
+                    <span class="brand-name">DepDrift</span>
+                    <span class="brand-version">v2.0.0</span>
+                </div>
+            </div>
+
+            <nav class="topbar__tabs" id="navTabs">
+                <button class="nav-tab active" data-tab="scanner">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 2a14.5 14.5 0 0 0 0 20 14.5 14.5 0 0 0 0-20"/><path d="M2 12h20"/></svg>
+                    <span>Repository Scanner</span>
+                </button>
+                <button class="nav-tab" data-tab="manifest">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>
+                    <span>Direct Manifest</span>
+                </button>
+                <button class="nav-tab" data-tab="inspector">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+                    <span>Package Inspector</span>
+                </button>
+                <button class="nav-tab" data-tab="history">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+                    <span>Audit History</span>
+                </button>
+                <button class="nav-tab" data-tab="diagnostics">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg>
+                    <span>Diagnostics</span>
+                </button>
+                <button class="nav-tab" data-tab="docs">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/></svg>
+                    <span>Docs</span>
+                </button>
+            </nav>
+
+            <div class="topbar__status" id="systemStatusBadge">
+                <span class="status-indicator status-indicator--green"></span>
+                <span class="status-text" id="systemStatusText">Operational · Rate Limit: 5000/hr</span>
+            </div>
         </header>
 
-        <!-- Live log -->
-        <section class="log-section" id="logSection" hidden>
-            <div class="log-bar">
-                <span class="log-bar__indicator">
-                    <span class="spinner spinner--sm"></span>
-                </span>
-                <span class="log-bar__text" id="logText">Starting scan…</span>
-            </div>
-        </section>
+        <!-- Main Content Viewport -->
+        <main class="main-content">
 
-        <!-- Stats -->
-        <section class="stats" id="statsSection" hidden>
-            <div class="stat-card" id="statTotal">
-                <span class="stat-card__number" data-target="0">0</span>
-                <span class="stat-card__label">Dependencies</span>
-            </div>
-            <div class="stat-card stat-card--warn" id="statOutdated">
-                <span class="stat-card__number" data-target="0">0</span>
-                <span class="stat-card__label">Outdated</span>
-            </div>
-            <div class="stat-card stat-card--danger" id="statCritical">
-                <span class="stat-card__number" data-target="0">0</span>
-                <span class="stat-card__label">Critical</span>
-            </div>
-            <div class="stat-card stat-card--bb" id="statBrowserbase">
-                <span class="stat-card__number" data-target="0">0</span>
-                <span class="stat-card__label">Browserbase Sessions</span>
-            </div>
-            <div class="stat-card stat-card--accent" id="statSaved">
-                <span class="stat-card__number" data-target="0">0</span>
-                <span class="stat-card__label">Minutes Saved</span>
-            </div>
-        </section>
+            <!-- TAB 1: REPOSITORY SCANNER -->
+            <section class="tab-pane active" id="tab-scanner">
+                <div class="page-header">
+                    <div class="page-header__content">
+                        <h1 class="page-title">Repository Drift Scanner</h1>
+                        <p class="page-desc">
+                            Automated dependency drift analysis with deep changelog inspection. Evaluates breaking API diffs, unpatched CVEs, and upstream releases via Browserbase cloud headless browser &amp; Gemma 4.
+                        </p>
+                    </div>
+                </div>
 
-        <!-- Results -->
-        <section class="results" id="resultsSection" hidden>
-            <div id="resultsContainer"></div>
-        </section>
+                <div class="scanner-card">
+                    <form class="scan-bar" id="ghScanForm">
+                        <div class="input-with-icon">
+                            <svg class="input-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 19c-5 1.5-5-2.5-7-3m14 6v-3.87a3.37 3.37 0 0 0-.94-2.61c3.14-.35 6.44-1.54 6.44-7A5.44 5.44 0 0 0 20 4.77 5.07 5.07 0 0 0 19.91 1S18.73.65 16 2.48a13.38 13.38 0 0 0-7 0C6.27.65 5.09 1 5.09 1A5.07 5.07 0 0 0 5 4.77a5.44 5.44 0 0 0-1.5 3.78c0 5.42 3.3 6.61 6.44 7A3.37 3.37 0 0 0 9 18.13V22"/></svg>
+                            <input
+                                type="text"
+                                id="ghScanInput"
+                                class="form-input"
+                                placeholder="GitHub repository (e.g. x-tahosin/giftofvoice) or username (e.g. x-tahosin)"
+                                autocomplete="off"
+                                spellcheck="false"
+                                required
+                            >
+                        </div>
+                        <button type="submit" class="btn btn--primary" id="ghScanBtn">
+                            <span class="btn__text">Analyze Drift</span>
+                            <span class="btn__loader" hidden><span class="spinner"></span></span>
+                        </button>
+                    </form>
 
-        <!-- Footer -->
-        <footer class="footer" id="footer" hidden>
-            <p>
-                Built for
-                <a href="https://dev.to/challenges/hacktoberfest-week3-2026-10-19" target="_blank" rel="noopener">Hacktoberfest Week 3: Slow and Steady</a>
-                ·
-                <strong>Best Use of Browserbase</strong>
-                ·
-                Gemma 4 open-weight model +
-                <a href="https://www.browserbase.com" target="_blank" rel="noopener">Browserbase Cloud Browser</a>
-            </p>
-        </footer>
+                    <div class="quick-targets">
+                        <span class="quick-targets__label">Suggested:</span>
+                        <button type="button" class="chip-btn" data-fill="x-tahosin/giftofvoice">x-tahosin/giftofvoice</button>
+                        <button type="button" class="chip-btn" data-fill="expressjs/express">expressjs/express</button>
+                        <button type="button" class="chip-btn" data-fill="x-tahosin">x-tahosin (all repos)</button>
+                    </div>
+                </div>
+
+                <!-- Live Scan Stream Progress -->
+                <div class="stream-panel" id="scanStreamPanel" hidden>
+                    <div class="stream-panel__header">
+                        <div class="stream-panel__status">
+                            <span class="spinner spinner--sm"></span>
+                            <span id="scanStreamStatus">Scanning dependencies…</span>
+                        </div>
+                        <span class="stream-panel__progress" id="scanStreamCounter"></span>
+                    </div>
+                    <div class="stream-log" id="scanStreamLog"></div>
+                </div>
+
+                <!-- Audit Results Area -->
+                <div class="audit-workspace" id="auditWorkspace" hidden>
+                    <!-- Metrics Summary Strip -->
+                    <div class="metrics-grid">
+                        <div class="metric-card">
+                            <div class="metric-card__header">
+                                <span class="metric-card__label">Total Dependencies</span>
+                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/></svg>
+                            </div>
+                            <div class="metric-card__val" id="metricTotal">0</div>
+                            <div class="metric-card__sub">Across scanned manifests</div>
+                        </div>
+
+                        <div class="metric-card metric-card--warning">
+                            <div class="metric-card__header">
+                                <span class="metric-card__label">Outdated Drift</span>
+                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+                            </div>
+                            <div class="metric-card__val" id="metricOutdated">0</div>
+                            <div class="metric-card__sub" id="metricOutdatedPct">0% of dependency tree</div>
+                        </div>
+
+                        <div class="metric-card metric-card--danger">
+                            <div class="metric-card__header">
+                                <span class="metric-card__label">Critical CVEs</span>
+                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+                            </div>
+                            <div class="metric-card__val" id="metricCritical">0</div>
+                            <div class="metric-card__sub">Requires urgent remediation</div>
+                        </div>
+
+                        <div class="metric-card metric-card--breaking">
+                            <div class="metric-card__header">
+                                <span class="metric-card__label">Breaking Changes</span>
+                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6L6 18"/><path d="M6 6l12 12"/></svg>
+                            </div>
+                            <div class="metric-card__val" id="metricBreaking">0</div>
+                            <div class="metric-card__sub">Major API signature shifts</div>
+                        </div>
+
+                        <div class="metric-card metric-card--success">
+                            <div class="metric-card__header">
+                                <span class="metric-card__label">Safe to Bump</span>
+                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>
+                            </div>
+                            <div class="metric-card__val" id="metricSafe">0</div>
+                            <div class="metric-card__sub">Patch &amp; minor bug fixes</div>
+                        </div>
+
+                        <div class="metric-card metric-card--browserbase">
+                            <div class="metric-card__header">
+                                <span class="metric-card__label">Browserbase Sessions</span>
+                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M2 12h20"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>
+                            </div>
+                            <div class="metric-card__val" id="metricBrowserbase">0</div>
+                            <div class="metric-card__sub">Dynamic SPA docs extracted</div>
+                        </div>
+                    </div>
+
+                    <!-- Action Controls & Filter Toolbar -->
+                    <div class="toolbar">
+                        <div class="toolbar__filters">
+                            <button class="filter-pill active" data-filter="ALL">All (<span id="countAll">0</span>)</button>
+                            <button class="filter-pill filter-pill--critical" data-filter="CRITICAL">Critical (<span id="countCritical">0</span>)</button>
+                            <button class="filter-pill filter-pill--breaking" data-filter="BREAKING">Breaking (<span id="countBreaking">0</span>)</button>
+                            <button class="filter-pill filter-pill--safe" data-filter="SAFE">Safe (<span id="countSafe">0</span>)</button>
+                            <button class="filter-pill filter-pill--current" data-filter="CURRENT">Up to Date (<span id="countCurrent">0</span>)</button>
+                        </div>
+
+                        <div class="toolbar__actions">
+                            <div class="search-input-wrap">
+                                <input type="text" id="depSearchInput" class="search-input" placeholder="Filter packages…">
+                            </div>
+                            <button type="button" class="btn btn--secondary" id="btnBatchSafe">
+                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>
+                                <span>Copy Safe Bump Script</span>
+                            </button>
+                            <div class="dropdown">
+                                <button type="button" class="btn btn--outline" id="btnExportMenu">
+                                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                                    <span>Export Report</span>
+                                </button>
+                                <div class="dropdown-menu" id="exportDropdown" hidden>
+                                    <button type="button" class="dropdown-item" id="exportMarkdown">
+                                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/></svg>
+                                        <span>Copy GitHub PR Markdown</span>
+                                    </button>
+                                    <button type="button" class="dropdown-item" id="exportJSON">
+                                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg>
+                                        <span>Download JSON Audit</span>
+                                    </button>
+                                    <button type="button" class="dropdown-item" id="exportCSV">
+                                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/></svg>
+                                        <span>Download CSV Spreadsheet</span>
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Dependency Results Table / Cards -->
+                    <div class="results-table-container">
+                        <div id="resultsTableBody"></div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- TAB 2: DIRECT MANIFEST UPLOAD / PASTE -->
+            <section class="tab-pane" id="tab-manifest" hidden>
+                <div class="page-header">
+                    <div class="page-header__content">
+                        <h1 class="page-title">Direct Manifest Auditor</h1>
+                        <p class="page-desc">
+                            Audit any <code>package.json</code> or <code>requirements.txt</code> directly without connecting to GitHub. Paste manifest content or drag and drop your file.
+                        </p>
+                    </div>
+                </div>
+
+                <div class="manifest-card">
+                    <div class="manifest-toolbar">
+                        <div class="manifest-type-selector">
+                            <label class="radio-label">
+                                <input type="radio" name="manifestType" value="package.json" checked>
+                                <span>package.json (Node / npm)</span>
+                            </label>
+                            <label class="radio-label">
+                                <input type="radio" name="manifestType" value="requirements.txt">
+                                <span>requirements.txt (Python / PyPI)</span>
+                            </label>
+                        </div>
+                        <button type="button" class="btn btn--outline btn--sm" id="btnLoadExampleManifest">Load Example Manifest</button>
+                    </div>
+
+                    <div class="manifest-editor-wrap">
+                        <textarea
+                            id="manifestTextarea"
+                            class="manifest-textarea"
+                            placeholder="Paste your package.json or requirements.txt here..."
+                            rows="14"
+                            spellcheck="false"
+                        ></textarea>
+                    </div>
+
+                    <div class="manifest-footer">
+                        <div class="file-drop-zone" id="fileDropZone">
+                            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+                            <span>Or drop file here (package.json / requirements.txt)</span>
+                            <input type="file" id="manifestFileInput" accept=".json,.txt" hidden>
+                        </div>
+                        <button type="button" class="btn btn--primary" id="btnRunManifestAudit">
+                            <span class="btn__text">Audit Manifest</span>
+                            <span class="btn__loader" hidden><span class="spinner"></span></span>
+                        </button>
+                    </div>
+                </div>
+            </section>
+
+            <!-- TAB 3: SINGLE PACKAGE INSPECTOR -->
+            <section class="tab-pane" id="tab-inspector" hidden>
+                <div class="page-header">
+                    <div class="page-header__content">
+                        <h1 class="page-title">Single Package Deep Inspector</h1>
+                        <p class="page-desc">
+                            Instant deep-dive on any npm or PyPI library. Resolves upstream semver, scans GitHub Advisories for CVEs, executes Browserbase extraction if notes are dynamic, and classifies risk via Gemma 4.
+                        </p>
+                    </div>
+                </div>
+
+                <div class="inspector-card">
+                    <form class="inspector-form" id="inspectForm">
+                        <div class="form-row">
+                            <div class="form-group flex-2">
+                                <label class="form-label" for="inspectPkgName">Package Name</label>
+                                <input type="text" id="inspectPkgName" class="form-input" placeholder="e.g. express, react, fastapi, pydantic" required>
+                            </div>
+                            <div class="form-group flex-1">
+                                <label class="form-label" for="inspectCurrentVer">Current Version</label>
+                                <input type="text" id="inspectCurrentVer" class="form-input" placeholder="e.g. 4.21.0 or 1.10.0" required>
+                            </div>
+                            <div class="form-group flex-1">
+                                <label class="form-label" for="inspectEcosystem">Ecosystem</label>
+                                <select id="inspectEcosystem" class="form-select">
+                                    <option value="npm">npm (Node.js / JavaScript)</option>
+                                    <option value="pypi">PyPI (Python)</option>
+                                </select>
+                            </div>
+                        </div>
+
+                        <div class="form-actions">
+                            <button type="submit" class="btn btn--primary" id="btnRunInspect">
+                                <span class="btn__text">Run Deep Inspection</span>
+                                <span class="btn__loader" hidden><span class="spinner"></span></span>
+                            </button>
+                        </div>
+                    </form>
+                </div>
+
+                <div class="inspector-result-panel" id="inspectorResultPanel" hidden></div>
+            </section>
+
+            <!-- TAB 4: AUDIT HISTORY -->
+            <section class="tab-pane" id="tab-history" hidden>
+                <div class="page-header">
+                    <div class="page-header__content">
+                        <h1 class="page-title">Audit History</h1>
+                        <p class="page-desc">
+                            Historical records of completed scans saved in SQLite. Review past drift trends, reload previous reports, or compare changes across audits.
+                        </p>
+                    </div>
+                    <div class="page-header__actions">
+                        <button type="button" class="btn btn--secondary btn--sm" id="btnRefreshHistory">
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>
+                            <span>Refresh</span>
+                        </button>
+                    </div>
+                </div>
+
+                <div class="history-card">
+                    <div class="history-table-wrap">
+                        <table class="data-table" id="historyTable">
+                            <thead>
+                                <tr>
+                                    <th>Target</th>
+                                    <th>Type</th>
+                                    <th>Scanned Date</th>
+                                    <th>Total Deps</th>
+                                    <th>Outdated</th>
+                                    <th>Critical</th>
+                                    <th>Breaking</th>
+                                    <th>Safe</th>
+                                    <th>Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody id="historyTableBody">
+                                <tr>
+                                    <td colspan="9" class="text-center text-muted">Loading audit history…</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </section>
+
+            <!-- TAB 5: SYSTEM DIAGNOSTICS -->
+            <section class="tab-pane" id="tab-diagnostics" hidden>
+                <div class="page-header">
+                    <div class="page-header__content">
+                        <h1 class="page-title">System Diagnostics &amp; Infrastructure</h1>
+                        <p class="page-desc">
+                            Real-time connection verification for GitHub API authentication, Browserbase headless browser infrastructure, Gemma 4 open weights reasoning engine, and public package registries.
+                        </p>
+                    </div>
+                    <div class="page-header__actions">
+                        <button type="button" class="btn btn--secondary btn--sm" id="btnRunDiagnostics">
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>
+                            <span>Run Check</span>
+                        </button>
+                    </div>
+                </div>
+
+                <div class="diagnostics-grid" id="diagnosticsGrid">
+                    <div class="diag-card" id="diagGithub">
+                        <div class="diag-card__header">
+                            <span class="diag-card__title">GitHub API</span>
+                            <span class="status-indicator status-indicator--gray" id="diagGithubInd"></span>
+                        </div>
+                        <div class="diag-card__body" id="diagGithubBody">Checking…</div>
+                    </div>
+
+                    <div class="diag-card" id="diagBrowserbase">
+                        <div class="diag-card__header">
+                            <span class="diag-card__title">Browserbase Cloud Browser</span>
+                            <span class="status-indicator status-indicator--gray" id="diagBrowserbaseInd"></span>
+                        </div>
+                        <div class="diag-card__body" id="diagBrowserbaseBody">Checking…</div>
+                    </div>
+
+                    <div class="diag-card" id="diagGemma">
+                        <div class="diag-card__header">
+                            <span class="diag-card__title">Gemma 4 Open Weights</span>
+                            <span class="status-indicator status-indicator--gray" id="diagGemmaInd"></span>
+                        </div>
+                        <div class="diag-card__body" id="diagGemmaBody">Checking…</div>
+                    </div>
+
+                    <div class="diag-card" id="diagRegistries">
+                        <div class="diag-card__header">
+                            <span class="diag-card__title">Public Package Registries</span>
+                            <span class="status-indicator status-indicator--gray" id="diagRegistriesInd"></span>
+                        </div>
+                        <div class="diag-card__body" id="diagRegistriesBody">Checking…</div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- TAB 6: DOCS & ARCHITECTURE -->
+            <section class="tab-pane" id="tab-docs" hidden>
+                <div class="page-header">
+                    <div class="page-header__content">
+                        <h1 class="page-title">Architecture &amp; Methodology</h1>
+                        <p class="page-desc">
+                            How DepDrift prevents breaking dependency updates, executes Browserbase cloud extraction, and categorizes technical risk.
+                        </p>
+                    </div>
+                </div>
+
+                <div class="docs-content">
+                    <article class="doc-card">
+                        <h2>Operational Risk Framework</h2>
+                        <div class="risk-legend">
+                            <div class="risk-legend__item">
+                                <span class="badge badge--CRITICAL">CRITICAL</span>
+                                <div>
+                                    <strong>Immediate Security or Stability Hazard:</strong> Unpatched CVEs, reported remote code execution or data exposure vulnerabilities, critical memory corruption patches.
+                                </div>
+                            </div>
+                            <div class="risk-legend__item">
+                                <span class="badge badge--BREAKING">BREAKING</span>
+                                <div>
+                                    <strong>Architectural Incompatibility:</strong> Removed or renamed exports, major configuration schema changes, deprecated callback signatures converted to Promises without shims.
+                                </div>
+                            </div>
+                            <div class="risk-legend__item">
+                                <span class="badge badge--SAFE">SAFE</span>
+                                <div>
+                                    <strong>Backwards-Compatible Improvements:</strong> Patch-level bug fixes, internal algorithmic performance improvements, non-breaking minor feature additions.
+                                </div>
+                            </div>
+                            <div class="risk-legend__item">
+                                <span class="badge badge--CURRENT">CURRENT</span>
+                                <div>
+                                    <strong>Up to Date:</strong> Local dependency constraint matches or is pinned to the latest upstream release tag.
+                                </div>
+                            </div>
+                        </div>
+                    </article>
+
+                    <article class="doc-card">
+                        <h2>Why Browserbase Headless Cloud Browser?</h2>
+                        <p>
+                            Modern libraries (such as Docusaurus, Next.js, VuePress, VitePress, and customized documentation portals) render changelogs client-side via JavaScript. Simple HTTP clients receive empty HTML shells (<code>&lt;div id="__next"&gt;&lt;/div&gt;</code>) with no release notes.
+                        </p>
+                        <p>
+                            DepDrift solves this by connecting Playwright over Chrome DevTools Protocol (CDP) to <strong>Browserbase</strong> remote headless browser sessions. Browserbase renders the complete DOM, executes JavaScript, waits for hydration, and extracts clean, structured text for Gemma 4 analysis.
+                        </p>
+                    </article>
+
+                    <article class="doc-card">
+                        <h2>CLI &amp; Local Execution</h2>
+                        <p>Run DepDrift locally in your development environment:</p>
+                        <pre class="code-block"><code># Clone repository
+git clone https://github.com/x-tahosin/depdrift.git
+cd depdrift
+
+# Install dependencies
+pip install -r requirements.txt
+
+# Start backend server
+python -m uvicorn app.main:app --host 127.0.0.1 --port 8000</code></pre>
+                    </article>
+                </div>
+            </section>
+        </main>
+
+        <!-- Detailed Dependency Modal / Drawer -->
+        <div class="modal-backdrop" id="depDetailModal" hidden>
+            <div class="modal-card">
+                <div class="modal-header">
+                    <div class="modal-title-group">
+                        <h2 class="modal-title" id="modalDepName">express</h2>
+                        <span class="badge" id="modalDepRisk">CRITICAL</span>
+                    </div>
+                    <button type="button" class="btn-close" id="modalCloseBtn">&times;</button>
+                </div>
+                <div class="modal-body" id="modalBody">
+                    <!-- Populated dynamically via app.js -->
+                </div>
+            </div>
+        </div>
+
+        <!-- Global Toast Notifications -->
+        <div class="toast-container" id="toastContainer"></div>
     </div>
 
     <script src="/static/app.js"></script>
