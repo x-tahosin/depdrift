@@ -1,6 +1,6 @@
 ---
 title: "DepDrift: Catch Breaking Changes in Your Dependencies Before Prod"
-published: false
+published: true
 tags: devchallenge, hf26challenge, browserbase, opensource
 canonical_url: https://github.com/x-tahosin/depdrift
 cover_image: https://raw.githubusercontent.com/x-tahosin/depdrift/main/docs/cover.png

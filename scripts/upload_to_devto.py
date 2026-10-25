@@ -39,7 +39,7 @@ def main():
         "article": {
             "title": "DepDrift: Catch Breaking Changes in Your Dependencies Before Prod",
             "body_markdown": content,
-            "published": False,
+            "published": True,
             "main_image": "https://raw.githubusercontent.com/x-tahosin/depdrift/main/docs/cover.png",
             "canonical_url": "https://github.com/x-tahosin/depdrift",
             "tags": ["devchallenge", "hf26challenge", "browserbase", "opensource"]
