@@ -95,21 +95,34 @@ async def check_pypi(
         return "unknown", ""
 
 
+from packaging.version import InvalidVersion, parse as parse_version
+
+
 def is_outdated(current: str, latest: str) -> bool:
-    """Compare two semver-ish version strings.
+    """Compare two semver or PEP 440 version strings.
 
     Returns True when *latest* is strictly newer than *current*.
     """
-    if current == "unknown" or latest == "unknown":
+    if not current or not latest:
         return False
+    current_clean = current.strip().lower()
+    latest_clean = latest.strip().lower()
+
+    if current_clean in ("unknown", "latest", "*") or latest_clean in ("unknown", "*"):
+        return False
+
     try:
-        cur_parts = [int(x) for x in re.findall(r"\d+", current)][:3]
-        lat_parts = [int(x) for x in re.findall(r"\d+", latest)][:3]
-        # pad to length 3
-        while len(cur_parts) < 3:
-            cur_parts.append(0)
-        while len(lat_parts) < 3:
-            lat_parts.append(0)
-        return lat_parts > cur_parts
-    except (ValueError, IndexError):
-        return current != latest
+        c_ver = parse_version(current_clean)
+        l_ver = parse_version(latest_clean)
+        return l_ver > c_ver
+    except InvalidVersion:
+        try:
+            cur_parts = [int(x) for x in re.findall(r"\d+", current_clean)][:3]
+            lat_parts = [int(x) for x in re.findall(r"\d+", latest_clean)][:3]
+            while len(cur_parts) < 3:
+                cur_parts.append(0)
+            while len(lat_parts) < 3:
+                lat_parts.append(0)
+            return lat_parts > cur_parts
+        except Exception:
+            return current_clean != latest_clean

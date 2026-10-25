@@ -11,3 +11,5 @@ build/
 .pytest_cache/
 .mypy_cache/
 test_scan.py
+*.db
+data/

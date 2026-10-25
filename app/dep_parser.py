@@ -6,8 +6,8 @@ import json
 import re
 
 
-def parse_package_json(content: str) -> list[tuple[str, str]]:
-    """Extract production dependencies from package.json.
+def parse_package_json(content: str, include_dev: bool = True) -> list[tuple[str, str]]:
+    """Extract dependencies from package.json.
 
     Returns list of (package_name, pinned_version) tuples.
     Strips semver range prefixes (^, ~, >=, etc.).
@@ -18,11 +18,15 @@ def parse_package_json(content: str) -> list[tuple[str, str]]:
         return []
 
     deps: dict[str, str] = {}
-    deps.update(pkg.get("dependencies", {}) or {})
-    # intentionally skip devDependencies — focus on production deps
+    if include_dev and isinstance(pkg.get("devDependencies"), dict):
+        deps.update(pkg.get("devDependencies", {}))
+    if isinstance(pkg.get("dependencies"), dict):
+        deps.update(pkg.get("dependencies", {}))
 
     result: list[tuple[str, str]] = []
     for name, version_spec in deps.items():
+        if not isinstance(version_spec, str):
+            continue
         # skip workspace/file/git references
         if any(version_spec.startswith(p) for p in ("file:", "link:", "git", "http", "/")):
             continue

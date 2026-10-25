@@ -2,13 +2,37 @@
 
 from __future__ import annotations
 
-from typing import Optional
-from pydantic import BaseModel
+from typing import Any, Optional
+from pydantic import BaseModel, Field
 
 
 class ScanRequest(BaseModel):
     """Incoming scan request body."""
     input: str  # GitHub username, owner/repo, or full URL
+
+
+class ManifestScanRequest(BaseModel):
+    """Direct manifest upload or paste."""
+    filename: str = Field(default="package.json", description="e.g. package.json or requirements.txt")
+    content: str = Field(..., description="Raw text of the manifest file")
+    ecosystem: str = Field(default="auto", description="auto, npm, or pypi")
+
+
+class InspectPackageRequest(BaseModel):
+    """Quick inspection of a single package."""
+    name: str
+    current_version: str
+    ecosystem: str = "npm"  # "npm" or "pypi"
+
+
+class AdvisoryInfo(BaseModel):
+    """Security advisory information."""
+    ghsa_id: Optional[str] = None
+    cve_id: Optional[str] = None
+    summary: Optional[str] = None
+    severity: str = "UNKNOWN"
+    published_at: Optional[str] = None
+    url: Optional[str] = None
 
 
 class DependencyResult(BaseModel):
@@ -21,21 +45,25 @@ class DependencyResult(BaseModel):
     risk: str  # CRITICAL | BREAKING | SAFE | SKIP | CURRENT
     summary: str
     action: str
-    changelog_url: str
-    github_repo_url: str
+    changelog_url: str = ""
+    github_repo_url: str = ""
     browserbase_session: Optional[str] = None
     changelog_source: Optional[str] = None  # "github_releases" | "browserbase" | "registry"
+    update_command: str = ""
+    advisories: list[dict[str, Any]] = Field(default_factory=list)
 
 
 class RepoResult(BaseModel):
-    """Scan result for one repository."""
+    """Scan result for one repository or manifest."""
     repo_name: str
     repo_url: str
-    default_branch: str
+    default_branch: str = "main"
     dependencies: list[DependencyResult]
     total: int
     outdated: int
     critical: int
+    breaking: int = 0
+    safe: int = 0
 
 
 class ScanProgress(BaseModel):
