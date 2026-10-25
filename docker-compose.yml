@@ -1,0 +1,44 @@
+# DepDrift — docker-compose for DigitalOcean deployment
+#
+# Architecture:
+#   1. "app" service — FastAPI backend + static frontend
+#   2. "ollama" service — Ollama with Gemma model for changelog analysis
+#
+# On DigitalOcean:
+#   - Deploy "app" on a regular Droplet ($6/mo)
+#   - Deploy "ollama" on a GPU Droplet with 1-Click Ollama
+#   - Connect via DO private networking (VPC)
+#
+# For local dev, both services run on the same machine.
+
+services:
+  app:
+    build: .
+    ports:
+      - "8000:8000"
+    environment:
+      - GITHUB_TOKEN=${GITHUB_TOKEN:-}
+      - OLLAMA_URL=http://ollama:11434
+      - GEMMA_MODEL=${GEMMA_MODEL:-gemma2:2b}
+    depends_on:
+      - ollama
+    restart: unless-stopped
+
+  ollama:
+    image: ollama/ollama:latest
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama_data:/root/.ollama
+    # For DO GPU Droplet, add:
+    # deploy:
+    #   resources:
+    #     reservations:
+    #       devices:
+    #         - driver: nvidia
+    #           count: 1
+    #           capabilities: [gpu]
+    restart: unless-stopped
+
+volumes:
+  ollama_data:

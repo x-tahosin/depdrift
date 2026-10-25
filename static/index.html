@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>DepDrift — Know What Changed Before It Breaks</title>
+    <meta name="description" content="DepDrift scans your GitHub repos overnight, reads every dependency changelog with Gemma on DigitalOcean, and tells you what's critical, what's safe, and what to skip.">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+    <canvas id="particles" aria-hidden="true"></canvas>
+
+    <div class="container">
+        <!-- Hero -->
+        <header class="hero" id="hero">
+            <div class="hero__badge">
+                <span class="hero__badge-dot"></span>
+                Powered by Gemma on DigitalOcean
+            </div>
+            <h1 class="hero__title">
+                <span class="hero__icon">🔄</span> DepDrift
+            </h1>
+            <p class="hero__subtitle">
+                Know what changed in your stack before it breaks your code.
+                <br>
+                <span class="hero__sub-detail">Gemma reads the changelogs you're too lazy to read.</span>
+            </p>
+
+            <form class="scan-form" id="scanForm">
+                <div class="scan-form__input-wrap">
+                    <input
+                        type="text"
+                        id="scanInput"
+                        class="scan-form__input"
+                        placeholder="GitHub username or owner/repo…"
+                        autocomplete="off"
+                        spellcheck="false"
+                        required
+                    >
+                    <button type="submit" class="scan-form__btn" id="scanBtn">
+                        <span class="scan-form__btn-text">Scan</span>
+                        <span class="scan-form__btn-loading" hidden>
+                            <span class="spinner"></span>
+                        </span>
+                    </button>
+                </div>
+                <p class="scan-form__hint">
+                    Try <button type="button" class="link-btn" data-fill="x-tahosin">x-tahosin</button>
+                    or <button type="button" class="link-btn" data-fill="expressjs/express">expressjs/express</button>
+                </p>
+            </form>
+        </header>
+
+        <!-- Live log -->
+        <section class="log-section" id="logSection" hidden>
+            <div class="log-bar">
+                <span class="log-bar__indicator">
+                    <span class="spinner spinner--sm"></span>
+                </span>
+                <span class="log-bar__text" id="logText">Starting scan…</span>
+            </div>
+        </section>
+
+        <!-- Stats -->
+        <section class="stats" id="statsSection" hidden>
+            <div class="stat-card" id="statTotal">
+                <span class="stat-card__number" data-target="0">0</span>
+                <span class="stat-card__label">Dependencies</span>
+            </div>
+            <div class="stat-card stat-card--warn" id="statOutdated">
+                <span class="stat-card__number" data-target="0">0</span>
+                <span class="stat-card__label">Outdated</span>
+            </div>
+            <div class="stat-card stat-card--danger" id="statCritical">
+                <span class="stat-card__number" data-target="0">0</span>
+                <span class="stat-card__label">Critical</span>
+            </div>
+            <div class="stat-card stat-card--accent" id="statSaved">
+                <span class="stat-card__number" data-target="0">0</span>
+                <span class="stat-card__label">Minutes Saved</span>
+            </div>
+        </section>
+
+        <!-- Results -->
+        <section class="results" id="resultsSection" hidden>
+            <div id="resultsContainer"></div>
+        </section>
+
+        <!-- Footer -->
+        <footer class="footer" id="footer" hidden>
+            <p>
+                Built for
+                <a href="https://dev.to/challenges/hacktoberfest-week3-2026-10-19" target="_blank" rel="noopener">Hacktoberfest Week 3: Slow and Steady</a>
+                ·
+                <strong>Best Use of DigitalOcean</strong>
+                ·
+                Gemma running on a
+                <a href="https://www.digitalocean.com/products/gpu-droplets" target="_blank" rel="noopener">DO GPU Droplet</a>
+            </p>
+        </footer>
+    </div>
+
+    <script src="/static/app.js"></script>
+</body>
+</html>
