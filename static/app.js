@@ -749,7 +749,16 @@
             modalPasteManifest.hidden = true;
             setLoading(true);
             if (logSection) logSection.hidden = false;
-            if (logText) logText.textContent = "Auditing pasted manifest…";
+            if (window.location.hostname.includes("github.io")) {
+                setTimeout(() => {
+                    setLoading(false);
+                    if (logText) logText.textContent = "Manifest audit complete (Interactive Demo Mode).";
+                    updateStats(DEMO_DATA.stats);
+                    renderResults(DEMO_DATA.results);
+                    if (footer) footer.hidden = false;
+                }, 400);
+                return;
+            }
 
             fetch("/api/scan/manifest", {
                 method: "POST",
@@ -805,6 +814,24 @@
             singleInspectResult.hidden = false;
             singleInspectResult.innerHTML = '<span class="spinner spinner--sm"></span> Inspecting package upstream…';
 
+            if (window.location.hostname.includes("github.io")) {
+                setTimeout(() => {
+                    btnRunInspectPkg.disabled = false;
+                    singleInspectResult.innerHTML =
+                        '<div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px">' +
+                            '<strong>' + escHtml(name) + '</strong>' +
+                            '<span class="dep-card__badge badge--CRITICAL">CRITICAL</span>' +
+                        '</div>' +
+                        '<div style="font-family:var(--font-mono); font-size:0.8rem; margin-bottom:8px">' +
+                            escHtml(ver) + ' → 5.3.0' +
+                        '</div>' +
+                        '<p style="color:var(--text-secondary); margin-bottom:6px">Active CVE-2024-52798 vulnerability identified. Breaking query parser changes in v5.</p>' +
+                        '<p style="color:var(--text-muted); font-style:italic">Upgrade immediately with: npm install ' + escHtml(name) + '@^5.3.0</p>' +
+                        '<a href="https://github.com/expressjs/express/releases" target="_blank" rel="noopener" style="color:var(--cyan); margin-top:6px; display:inline-block">View changelog →</a>';
+                }, 400);
+                return;
+            }
+
             const url = "/api/inspect?name=" + encodeURIComponent(name) +
                         "&current_version=" + encodeURIComponent(ver) +
                         "&ecosystem=" + encodeURIComponent(eco);
@@ -843,6 +870,32 @@
         btnOpenDiag.addEventListener("click", function () {
             modalDiagnostics.hidden = false;
             diagModalBody.innerHTML = '<div class="diag-loading"><span class="spinner spinner--sm"></span> Checking system connections…</div>';
+
+            if (window.location.hostname.includes("github.io")) {
+                setTimeout(() => {
+                    const items = [
+                        { name: "Browserbase Cloud Browser", ok: true, detail: "Session Pool Active (Playwright CDP)" },
+                        { name: "GitHub Authenticated PAT", ok: true, detail: "4,982/5,000 req/hr remaining" },
+                        { name: "Gemma 4 AI Engine", ok: true, detail: "Model: gemma-4-26b-a4b-it (Ready)" },
+                        { name: "SQLite Persistence Engine", ok: true, detail: "Path: data/depdrift.db" }
+                    ];
+                    let html = "";
+                    for (const it of items) {
+                        html +=
+                            '<div class="diag-item">' +
+                                '<div>' +
+                                    '<strong>' + escHtml(it.name) + '</strong><br>' +
+                                    '<span style="font-size:0.75rem; color:var(--text-muted)">' + escHtml(it.detail) + '</span>' +
+                                '</div>' +
+                                '<span class="' + (it.ok ? 'diag-status--ok' : 'diag-status--warn') + '">' +
+                                    (it.ok ? '● ACTIVE' : '○ PENDING') +
+                                '</span>' +
+                            '</div>';
+                    }
+                    diagModalBody.innerHTML = html;
+                }, 300);
+                return;
+            }
 
             fetch("/api/diagnostics")
                 .then(res => res.json())
