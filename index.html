@@ -131,7 +131,12 @@
             </div>
             <div class="modal-body">
                 <p class="modal-desc">Paste your <code>package.json</code> or <code>requirements.txt</code> directly without connecting to GitHub.</p>
-                <textarea id="manifestInputArea" class="manifest-textarea" rows="8" placeholder='{\n  "dependencies": {\n    "express": "^4.21.0",\n    "dotenv": "^16.4.5"\n  }\n}'></textarea>
+                <textarea id="manifestInputArea" class="manifest-textarea" rows="8" placeholder='{
+  "dependencies": {
+    "express": "^4.21.0",
+    "dotenv": "^16.4.5"
+  }
+}'></textarea>
                 <div class="modal-actions">
                     <button type="button" class="btn-action" id="btnLoadSampleManifest">Load Sample</button>
                     <button type="button" class="scan-form__btn" id="btnSubmitManifest">Audit Manifest</button>
