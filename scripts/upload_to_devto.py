@@ -37,12 +37,12 @@ def main():
             
     payload = {
         "article": {
-            "title": "DepDrift: Catch Breaking Changes in Your Deps Before They Break Prod",
+            "title": "DepDrift: Catch Breaking Changes in Your Dependencies Before Prod",
             "body_markdown": content,
             "published": False,
             "main_image": "https://raw.githubusercontent.com/x-tahosin/depdrift/main/docs/cover.png",
             "canonical_url": "https://github.com/x-tahosin/depdrift",
-            "tags": ["devchallenge", "hacktoberfest", "browserbase", "opensource"]
+            "tags": ["devchallenge", "hf26challenge", "browserbase", "opensource"]
         }
     }
     
