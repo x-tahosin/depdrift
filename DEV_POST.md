@@ -3,8 +3,10 @@ title: "DepDrift: Catch Breaking Changes in Your Deps Before They Break Prod"
 published: false
 tags: devchallenge, hacktoberfest, browserbase, opensource
 canonical_url: https://github.com/x-tahosin/depdrift
-cover_image: https://raw.githubusercontent.com/x-tahosin/depdrift/main/docs/results-dashboard.png
+cover_image: https://raw.githubusercontent.com/x-tahosin/depdrift/main/docs/cover.png
 ---
+
+![DepDrift Banner](https://raw.githubusercontent.com/x-tahosin/depdrift/main/docs/cover.png)
 
 *This is a submission for the [Hacktoberfest Open-Source AI Challenge Week 3: Slow and Steady](https://dev.to/challenges/hacktoberfest-week3-2026-10-19)*
 
@@ -27,11 +29,18 @@ So the PRs sit there. Dependencies drift months behind. Critical CVEs go unnotic
 - **SAFE**: Backward-compatible bug fixes and performance patches. Safe to batch bump.
 - **CURRENT**: Up to date.
 
-![DepDrift Interface](https://raw.githubusercontent.com/x-tahosin/depdrift/main/docs/hero.png)
+### The Web Interface
+
+Here is the clean, dark-mode web interface of DepDrift:
+
+![DepDrift Web Interface](https://raw.githubusercontent.com/x-tahosin/depdrift/main/docs/hero.png)
 
 ---
 
 ## Demo
+
+- **Live Interactive Demo:** [https://x-tahosin.github.io/depdrift/](https://x-tahosin.github.io/depdrift/)
+- **GitHub Repository:** [https://github.com/x-tahosin/depdrift](https://github.com/x-tahosin/depdrift)
 
 Here is a real audit run on my own repository (`x-tahosin/giftofvoice`):
 
@@ -45,7 +54,7 @@ Here is a real audit run on my own repository (`x-tahosin/giftofvoice`):
 
 ### Deep CVE & Vulnerability Inspector
 
-Clicking any card opens a dedicated drawer showing the exact GitHub Security Advisory IDs (GHSA / CVE), severity ratings, official links, and a 1-click update command:
+Clicking any card on the website opens a dedicated drawer showing the exact GitHub Security Advisory IDs (GHSA / CVE), severity ratings, official links, and a 1-click update command:
 
 ![Deep CVE Inspector](https://raw.githubusercontent.com/x-tahosin/depdrift/main/docs/cve-modal.png)
 
@@ -115,9 +124,10 @@ FastAPI Backend (Real-Time SSE Stream)
       └── Gemma 4 (Open-Weights Model analyzes diff and assigns risk)
 ```
 
-- **Source Code**: [https://github.com/x-tahosin/depdrift](https://github.com/x-tahosin/depdrift)
-- **License**: MIT
-- **Stack**: Python 3.11+, FastAPI, Playwright, Browserbase, Gemma 4, Vanilla CSS/JS
-- **Test Suite**: 12/12 unit and integration tests passing
+- **Live Hosted Demo:** [https://x-tahosin.github.io/depdrift/](https://x-tahosin.github.io/depdrift/)
+- **Source Code:** [https://github.com/x-tahosin/depdrift](https://github.com/x-tahosin/depdrift)
+- **License:** MIT
+- **Stack:** Python 3.11+, FastAPI, Playwright, Browserbase, Gemma 4, Vanilla CSS/JS
+- **Test Suite:** 12/12 unit and integration tests passing
 
-Building DepDrift turned Monday morning dependency dread into a 90-second automated check. Check out the repository, run it on your own repos, and stop guessing what changed in your stack.
+Building DepDrift turned Monday morning dependency dread into a 90-second automated check. Check out the repository, try the live demo, and stop guessing what changed in your stack.
